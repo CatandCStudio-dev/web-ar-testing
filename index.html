@@ -1,61 +1,99 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="id">
 <head>
-    <title>AR.js Location-Based Sempurna</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-    <!-- lokasi-based helper -->
-    <script src="https://unpkg.com/aframe-gps-entity-place/dist/aframe-gps-entity-place.min.js"></script>
-    
-    <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>AR.js - Location Box Example</title>
+  <!-- A-Frame -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.5.0/aframe.min.js"></script>
+  <!-- AR.js (A-Frame build with location-based features) -->
+  <!-- Note: gunakan https dan tes pada perangkat mobile untuk hasil terbaik -->
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.min.js"></script>
+  <style>
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+    #instructions { position: absolute; z-index: 2; left: 8px; top: 8px; background: rgba(255,255,255,0.85); padding: 8px 10px; border-radius: 6px; font-family: sans-serif; }
+  </style>
 </head>
-<body style='margin : 0px; overflow: hidden;'> 
+<body>
+  <div id="instructions">
+    Arahkan kamera ke area sekitar. Pastikan lokasi diaktifkan. Ubah koordinat pada variabel <code>targetLat</code> dan <code>targetLon</code> di bawah jika perlu.
+  </div>
 
-    <a-scene
-        vr-mode-ui="enabled: false"
-        embedded
-        arjs='sourceType: webcam; debugUIEnabled: false;'  >
-        
-        <!-- Kecilkan ukuran dan letakkan base di sekitar ketinggian manusia -->
-        <a-cylinder 
-            material="color: gold; opacity: 0.9" 
-            radius="1" 
-            height="2"
-            position="0 1 0"
-            rotation="0 0 0"
-            shadow
-            gps-entity-place="latitude: -7.5411441; longitude: 110.6233566;"
-        >
-            <a-text
-                value="OBJEK AR LOKASI"
-                position="0 1.6 0"
-                scale="2 2 2"
-                align="center"
-                look-at="[gps-camera]" 
-                color="#FFFFFF"
-            ></a-text>
-        </a-cylinder>
- 
-         <a-camera 
-             gps-camera 
-             rotation-reader 
-         ></a-camera>
-         
-     </a-scene>
- 
-    <script>
-      // Debug: lihat update GPS dan jitter
-      window.addEventListener('gps-camera-update-position', (ev) => {
-        console.log('gps-camera-update-position', ev.detail.position);
+  <!-- A-Frame scene dengan arjs: location-based -->
+  <a-scene vr-mode-ui="enabled: false" embedded
+           arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;" >
+
+    <!-- Camera (AR.js akan mengurus kamera) -->
+    <a-camera gps-camera rotation-reader></a-camera>
+
+    <!-- Box yang akan ditempatkan di koordinat tertentu -->
+    <!-- Kita memulai tanpa koordinat, lalu di-set lewat script supaya mudah diganti -->
+    <a-box id="targetBox"
+           position="0 0 0"
+           scale="5 5 5"
+           visible="false"
+           material="color: #FF3333; opacity: 0.9;"
+           gps-entity-place="latitude: 0; longitude: 0;">
+    </a-box>
+
+    <!-- Label sederhana di atas box -->
+    <a-entity id="label" visible="false" gps-entity-place="latitude:0; longitude:0;">
+      <a-text value="Lokasi Target" align="center" position="0 4 0" scale="8 8 8"></a-text>
+    </a-entity>
+
+  </a-scene>
+
+  <script>
+    // === Konfigurasi: ubah koordinat target di sini ===
+    // Contoh: target di sekitar Monas, Jakarta (ubah ke koordinat yang Anda inginkan)
+    const targetLat = -7.5411441;    // ganti dengan latitude tujuan
+    const targetLon = 110.6233566;   // ganti dengan longitude tujuan
+    // ==================================================
+
+    const box = document.getElementById('targetBox');
+    const label = document.getElementById('label');
+
+    // Fungsi bantu untuk meng-set koordinat pada gps-entity-place
+    function setGPS(entity, lat, lon) {
+      // gps-entity-place menggunakan atribut gps-entity-place yang berformat: "latitude: x; longitude: y;"
+      entity.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lon};`);
+      entity.setAttribute('visible', 'true');
+    }
+
+    // Tunggu sampai komponen gps-camera siap
+    window.addEventListener('gps-camera-update-position', function(ev) {
+      // ketika posisi device sudah tersedia, pasang box ke koordinat target
+      // event ini akan sering terpanggil — kita set sekali saja
+      if (!box.getAttribute('visible') || box.getAttribute('gps-entity-place').indexOf(targetLat) === -1) {
+        setGPS(box, targetLat, targetLon);
+        setGPS(label, targetLat, targetLon);
+        console.log('GPS box di-set ke:', targetLat, targetLon);
+      }
+    });
+
+    // Fallback: jika perangkat desktop atau tidak mendapat izin lokasi
+    // kita sediakan tombol simulasi untuk menguji tampilan di desktop
+    function addSimulateButton() {
+      const btn = document.createElement('button');
+      btn.textContent = 'Simulasi Lokasi (Desktop)';
+      Object.assign(btn.style, { position: 'absolute', left: '8px', bottom: '8px', zIndex: 2, padding: '8px 12px' });
+      document.body.appendChild(btn);
+      btn.addEventListener('click', () => {
+        setGPS(box, targetLat, targetLon);
+        setGPS(label, targetLat, targetLon);
+        alert('Simulasi lokasi di-set. Arahkan camera virtual ke objek (desktop hanya preview).');
       });
-      window.addEventListener('error', e => console.error(e));
-    </script>
- </body>
- </html>
+    }
+
+    // Jika tidak dijalankan pada perangkat mobile, tampilkan tombol simulasi
+    if (!('ontouchstart' in window) || !navigator.geolocation) {
+      addSimulateButton();
+    }
+
+    // Catatan: AR.js location-based perlu akses geolocation API dan HTTPS.
+    // - Test pada perangkat mobile (Chrome/Firefox Android atau Safari iOS).
+    // - Pastikan halaman diakses via HTTPS (atau localhost).
+    // - Jika ingin mengganti ukuran/warna box, ubah atribut di <a-box>.
+  </script>
+</body>
+</html>
