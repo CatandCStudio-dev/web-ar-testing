@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://unpkg.com/aframe@1.5.0/dist/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
+    <!-- tambah komponen lokasi (gps-camera, gps-entity-place) -->
+    <script src="https://unpkg.com/aframe-gps-entity-place/dist/aframe-gps-entity-place.min.js"></script>
   </head>
   <body style="margin: 0; overflow: hidden;">
     <a-scene
@@ -26,8 +28,10 @@
     <script>
       window.addEventListener('gps-camera-update-position', e => {
         console.log('GPS ready:', e.detail.position);
-        alert('GPS sudah aktif! Lokasi: ' + JSON.stringify(e.detail.position));
+        // hindari alert saat testing; gunakan console dulu
       });
+      // debugging: tunjukkan pesan kalau ada error loading skrip
+      window.addEventListener('error', e => console.error('JS error', e));
     </script>
   </body>
 </html>
