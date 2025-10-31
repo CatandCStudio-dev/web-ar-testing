@@ -1,67 +1,70 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>AR Navigasi Kampus</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <!-- Versi A-Frame yang kompatibel -->
-    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-    
-    <!-- AR.js build yang stabil -->
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-    
-    <!-- Komponen GPS -->
-    <script src="https://unpkg.com/aframe-gps-entity-place/dist/aframe-gps-entity-place.min.js"></script>
+    <title>WebXR Ground Tracking</title>
+
+    <!-- A-Frame dengan dukungan WebXR -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   </head>
 
   <body style="margin: 0; overflow: hidden;">
     <a-scene
       vr-mode-ui="enabled: false"
+      webxr="optionalFeatures: hit-test, dom-overlay; overlayElement: #overlay;"
+      renderer="colorManagement: true; physicallyCorrectLights;"
       embedded
-      arjs="sourceType: webcam; debugUIEnabled: false;"
+      cursor="rayOrigin: mouse;"
     >
-      <!-- Tujuan -->
-      <a-text 
-        id="arah"
-        value="Menuju Gedung FTI"
-        gps-entity-place="latitude: -7.5595; longitude: 110.8567;"
-        look-at="[gps-camera]"
-        scale="5 5 5"
-        color="red">
-      </a-text>
+      <!-- Cahaya -->
+      <a-light type="ambient" intensity="0.8"></a-light>
+      <a-light type="directional" position="1 1 1" intensity="1"></a-light>
 
-      <!-- Panah penunjuk arah -->
-      <a-entity
-        id="arrow"
-        geometry="primitive: cone; height: 3; radiusBottom: 1;"
-        material="color: blue"
-        position="0 2 -10"
-        rotation="0 0 0"
-      ></a-entity>
+      <!-- Kamera -->
+      <a-camera position="0 1.6 0" look-controls></a-camera>
 
-      <a-camera gps-camera rotation-reader></a-camera>
+      <!-- Objek akan muncul di sini saat disentuh -->
+      <a-entity id="modelContainer"></a-entity>
+
+      <!-- Lantai virtual untuk debug -->
+      <a-plane rotation="-90 0 0" width="4" height="4" color="#ccc" visible="false"></a-plane>
     </a-scene>
 
+    <div id="overlay" style="
+      position: absolute;
+      bottom: 10px;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-family: sans-serif;
+    ">
+      <p>Ketuk layar untuk menaruh objek di permukaan</p>
+    </div>
+
     <script>
-      const tujuan = { lat: -7.5595, lon: 110.8567 };
-      const arrow = document.getElementById("arrow");
+      const sceneEl = document.querySelector('a-scene');
+      const modelContainer = document.getElementById('modelContainer');
 
-      window.addEventListener("gps-camera-update-position", e => {
-        const pos = e.detail.position;
-        const bearing = getBearing(pos.latitude, pos.longitude, tujuan.lat, tujuan.lon);
-        arrow.setAttribute("rotation", `0 ${-bearing} 0`);
+      sceneEl.addEventListener('click', e => {
+        const viewerSpace = sceneEl.renderer.xr.getReferenceSpace();
+        const frame = sceneEl.renderer.xr.getFrame();
+
+        if (frame && frame.getHitTestResults) {
+          const hitTestSource = frame.getHitTestResults(frame.session.hitTestSource);
+          if (hitTestSource.length > 0) {
+            const pose = hitTestSource[0].getPose(viewerSpace);
+            if (pose) {
+              const { x, y, z } = pose.transform.position;
+              // Buat objek baru di posisi klik
+              const box = document.createElement('a-box');
+              box.setAttribute('position', `${x} ${y} ${z}`);
+              box.setAttribute('color', 'tomato');
+              box.setAttribute('scale', '0.3 0.3 0.3');
+              modelContainer.appendChild(box);
+            }
+          }
+        }
       });
-
-      function getBearing(lat1, lon1, lat2, lon2) {
-        const toRad = x => x * Math.PI / 180;
-        const dLon = toRad(lon2 - lon1);
-        const y = Math.sin(dLon) * Math.cos(toRad(lat2));
-        const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-                  Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
-        let brng = Math.atan2(y, x);
-        brng = brng * 180 / Math.PI;
-        return (brng + 360) % 360;
-      }
     </script>
   </body>
 </html>
