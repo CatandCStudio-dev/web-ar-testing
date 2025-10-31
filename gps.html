@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>AR Navigasi Kampus</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.rawgit.com/jeromeetienne/AR.js/3.3.2/aframe/build/aframe-ar.js"></script>
+  </head>
+  <body style="margin: 0; overflow: hidden;">
+    <a-scene
+      vr-mode-ui="enabled: false"
+      embedded
+      arjs="sourceType: webcam; debugUIEnabled: false;"
+    >
+      <!-- Teks arah -->
+      <a-text 
+        value="Gedung FTI ada di depan!" 
+        gps-entity-place="latitude: -7.5595; longitude: 110.8567;" 
+        look-at="[gps-camera]"
+        scale="5 5 5"
+        color="red">
+      </a-text>
+
+      <!-- Kamera AR dengan GPS -->
+      <a-camera gps-camera rotation-reader></a-camera>
+    </a-scene>
+  </body>
+</html>
