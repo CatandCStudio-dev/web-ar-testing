@@ -4,9 +4,10 @@
     <title>AR.js Location-Based Sempurna</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script> 
-    
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <!-- lokasi-based helper -->
+    <script src="https://unpkg.com/aframe-gps-entity-place/dist/aframe-gps-entity-place.min.js"></script>
     
     <style>
         body { 
@@ -15,39 +16,46 @@
         }
     </style>
 </head>
-<body style='margin : 0px; overflow: hidden;'>
+<body style='margin : 0px; overflow: hidden;'> 
 
     <a-scene
         vr-mode-ui="enabled: false"
         embedded
         arjs='sourceType: webcam; debugUIEnabled: false;'  >
         
+        <!-- Kecilkan ukuran dan letakkan base di sekitar ketinggian manusia -->
         <a-cylinder 
-            material="color: gold; opacity: 0.8" 
-            radius="10" 
-            height="30"
-            position="0 15 0"
-            scale="1 1 1"
+            material="color: gold; opacity: 0.9" 
+            radius="1" 
+            height="2"
+            position="0 1 0"
             rotation="0 0 0"
             shadow
             gps-entity-place="latitude: -7.5411441; longitude: 110.6233566;"
         >
             <a-text
-                value="OBJECK AR LOKASI"
-                position="0 15.5 0"
-                scale="15 15 15"
+                value="OBJEK AR LOKASI"
+                position="0 1.6 0"
+                scale="2 2 2"
                 align="center"
                 look-at="[gps-camera]" 
                 color="#FFFFFF"
             ></a-text>
         </a-cylinder>
-
-        <a-camera 
-            gps-camera 
-            rotation-reader 
-        ></a-camera>
-        
-    </a-scene>
-
-</body>
-</html>
+ 
+         <a-camera 
+             gps-camera 
+             rotation-reader 
+         ></a-camera>
+         
+     </a-scene>
+ 
+    <script>
+      // Debug: lihat update GPS dan jitter
+      window.addEventListener('gps-camera-update-position', (ev) => {
+        console.log('gps-camera-update-position', ev.detail.position);
+      });
+      window.addEventListener('error', e => console.error(e));
+    </script>
+ </body>
+ </html>
