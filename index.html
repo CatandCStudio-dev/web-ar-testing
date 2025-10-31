@@ -1,16 +1,19 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>WebXR Ground Tracking (Hit-Test) dengan A-Frame</title>
+    <title>WebXR Ground Tracking dan Penempatan Objek Otomatis</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script> 
     
     <script>
-        // Mendefinisikan sebuah komponen A-Frame
+        // ===============================================
+        // KOMPONEN KUSTOM: PLACE ON HIT
+        // Logika untuk mendeteksi permukaan dan menempatkan objek
+        // ===============================================
         AFRAME.registerComponent('place-on-hit', {
             init: function () {
                 const el = this.el;
                 
-                // 1. Buat Reticle (target) untuk menandai lokasi yang terdeteksi
+                // 1. Buat Reticle (target)
                 this.reticle = document.createElement('a-ring');
                 this.reticle.setAttribute('radius', '0.1');
                 this.reticle.setAttribute('color', 'green');
@@ -19,11 +22,8 @@
                 el.appendChild(this.reticle);
 
                 // 2. Event Listener untuk Mendeteksi Permukaan
-                el.sceneEl.addEventListener('ar-hit-test-start', () => {
-                    console.log('Hit-Test Started');
-                });
-
                 el.sceneEl.addEventListener('ar-hit-test-result', (event) => {
+                    // Cek apakah ada permukaan yang terdeteksi
                     if (event.detail.results.length > 0) {
                         const hit = event.detail.results[0];
                         // Posisikan reticle ke lokasi hit-test
@@ -37,14 +37,16 @@
 
                 // 3. Event Listener untuk Penempatan Objek saat diketuk/klik
                 el.sceneEl.addEventListener('touchstart', (event) => {
+                    // Pastikan reticle terlihat (berarti ada permukaan)
                     if (this.reticle.getAttribute('visible')) {
                         // Duplikasi posisi reticle
                         const position = this.reticle.getAttribute('position');
 
-                        // Buat objek baru (misalnya, a-box) di posisi tersebut
+                        // Buat objek baru (misalnya, a-box)
                         const newObject = document.createElement('a-box');
                         newObject.setAttribute('material', { color: 'red' });
-                        newObject.setAttribute('position', position.x + ' ' + (position.y + 0.5) + ' ' + position.z); // Naikkan 0.5 agar tidak tenggelam
+                        // Tambahkan 0.5 pada sumbu Y agar objek berdiri di atas tanah (0,0)
+                        newObject.setAttribute('position', position.x + ' ' + (position.y + 0.5) + ' ' + position.z); 
                         newObject.setAttribute('scale', '0.5 0.5 0.5');
                         
                         // Tambahkan objek ke scene
@@ -53,12 +55,46 @@
                 });
             }
         });
+
+        // ===============================================
+        // FUNGSI AUTO-ENTER AR (Memicu AR setelah interaksi)
+        // Karena browser modern memerlukan interaksi pengguna untuk mengaktifkan kamera.
+        // ===============================================
+        function autoEnterAR() {
+            const scene = document.querySelector('a-scene');
+            
+            if (scene) {
+                // Tunggu sampai scene dimuat sepenuhnya
+                scene.addEventListener('loaded', () => {
+                    // Tambahkan event listener ke BODY untuk sentuhan pertama
+                    document.body.addEventListener('touchstart', (e) => {
+                        // Cek jika scene sudah dimuat dan belum dalam AR mode
+                        if (scene.hasLoaded && !scene.is('ar-mode')) {
+                            console.log('User interacted. Entering AR Mode...');
+                            scene.enterAR();
+                        }
+                    }, { once: true }); // { once: true } memastikan listener dihapus setelah satu kali pemicuan
+                });
+            }
+        }
+
+        // Panggil fungsi segera setelah skrip dimuat
+        autoEnterAR();
+
     </script>
 </head>
 <body style='margin : 0px; overflow: hidden;'>
 
-    <a-scene>
-      <a-box position="0 1 -3" rotation="0 45 0" color="blue"></a-box>
+    <a-scene
+        renderer="logarithmicDepthBuffer: true;"
+        ar-mode-ui='enabled: false;'       vr-mode-ui="enabled: false"
+        webxr="requiredFeatures: [hit-test, local-floor]; optionalFeatures: [dom-overlay];"
+    >
+        <a-entity light="type: ambient; intensity: 0.5;"></a-entity>
+        <a-entity light="type: directional; intensity: 0.5;" position="1 1 1"></a-entity>
+
+        <a-entity camera place-on-hit></a-entity>
+        
     </a-scene>
 
 </body>
