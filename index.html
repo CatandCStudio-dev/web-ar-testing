@@ -1,33 +1,24 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebXR Ground Tracking</title>
-
-    <!-- A-Frame dengan dukungan WebXR -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   </head>
-
   <body style="margin: 0; overflow: hidden;">
     <a-scene
       vr-mode-ui="enabled: false"
-      webxr="optionalFeatures: hit-test, dom-overlay; overlayElement: #overlay;"
-      renderer="colorManagement: true; physicallyCorrectLights;"
+      renderer="colorManagement: true; physicallyCorrectLights: true;"
+      webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: dom-overlay; overlayElement: #overlay;"
       embedded
-      cursor="rayOrigin: mouse;"
     >
-      <!-- Cahaya -->
-      <a-light type="ambient" intensity="0.8"></a-light>
-      <a-light type="directional" position="1 1 1" intensity="1"></a-light>
+      <a-light type="ambient" intensity="1"></a-light>
+      <a-light type="directional" position="1 3 2" intensity="1.5"></a-light>
 
-      <!-- Kamera -->
-      <a-camera position="0 1.6 0" look-controls></a-camera>
+      <a-camera id="camera" position="0 1.6 0" look-controls></a-camera>
 
-      <!-- Objek akan muncul di sini saat disentuh -->
-      <a-entity id="modelContainer"></a-entity>
-
-      <!-- Lantai virtual untuk debug -->
-      <a-plane rotation="-90 0 0" width="4" height="4" color="#ccc" visible="false"></a-plane>
+      <!-- Kontainer untuk menaruh objek -->
+      <a-entity id="objects"></a-entity>
     </a-scene>
 
     <div id="overlay" style="
@@ -38,31 +29,46 @@
       color: white;
       font-family: sans-serif;
     ">
-      <p>Ketuk layar untuk menaruh objek di permukaan</p>
+      <p>Gerakkan ponsel untuk mengenali permukaan, lalu ketuk untuk menaruh objek</p>
     </div>
 
     <script>
-      const sceneEl = document.querySelector('a-scene');
-      const modelContainer = document.getElementById('modelContainer');
+      const scene = document.querySelector("a-scene");
+      const objects = document.getElementById("objects");
 
-      sceneEl.addEventListener('click', e => {
-        const viewerSpace = sceneEl.renderer.xr.getReferenceSpace();
-        const frame = sceneEl.renderer.xr.getFrame();
+      let hitTestSource = null;
+      let localSpace = null;
 
-        if (frame && frame.getHitTestResults) {
-          const hitTestSource = frame.getHitTestResults(frame.session.hitTestSource);
-          if (hitTestSource.length > 0) {
-            const pose = hitTestSource[0].getPose(viewerSpace);
-            if (pose) {
-              const { x, y, z } = pose.transform.position;
-              // Buat objek baru di posisi klik
-              const box = document.createElement('a-box');
-              box.setAttribute('position', `${x} ${y} ${z}`);
-              box.setAttribute('color', 'tomato');
-              box.setAttribute('scale', '0.3 0.3 0.3');
-              modelContainer.appendChild(box);
-            }
-          }
+      scene.addEventListener("enter-vr", async () => {
+        const session = scene.renderer.xr.getSession();
+
+        // Pastikan mendukung hit test
+        const viewerSpace = await session.requestReferenceSpace("viewer");
+        hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+        localSpace = await session.requestReferenceSpace("local-floor");
+
+        session.addEventListener("end", () => {
+          hitTestSource = null;
+          localSpace = null;
+        });
+      });
+
+      // Saat user mengetuk layar → taruh objek di permukaan
+      scene.addEventListener("click", () => {
+        const frame = scene.renderer.xr.getFrame();
+        if (!frame || !hitTestSource) return;
+
+        const hitTestResults = frame.getHitTestResults(hitTestSource);
+        if (hitTestResults.length > 0) {
+          const pose = hitTestResults[0].getPose(localSpace);
+          const { x, y, z } = pose.transform.position;
+
+          const box = document.createElement("a-box");
+          box.setAttribute("color", "tomato");
+          box.setAttribute("scale", "0.3 0.3 0.3");
+          box.setAttribute("position", `${x} ${y} ${z}`);
+          box.setAttribute("animation", "property: rotation; to: 0 360 0; loop: true; dur: 4000");
+          objects.appendChild(box);
         }
       });
     </script>
