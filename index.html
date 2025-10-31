@@ -15,8 +15,23 @@
 
   <style>
     body, html { margin: 0; padding: 0; overflow: hidden; }
-    #map { position: fixed; bottom: 10px; left: 10px; width: 150px; height: 150px; border: 2px solid #333; border-radius: 8px; z-index: 2; }
-    #info { position: fixed; top: 10px; left: 10px; z-index: 2; background: rgba(255,255,255,0.85); padding: 8px 12px; border-radius: 8px; font-family: sans-serif; }
+
+    /* pastikan scene/video berada di bawah overlay UI */
+    a-scene,
+    a-scene .arjs-video,
+    a-scene canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1; /* rendah supaya overlay terlihat */
+      pointer-events: none; /* biarkan klik jatuh ke overlay jika perlu */
+    }
+
+    /* overlay UI di atas scene */
+    #map { position: fixed; bottom: 10px; left: 10px; width: 150px; height: 150px; border: 2px solid #333; border-radius: 8px; z-index: 9999; pointer-events: auto; }
+    #info { position: fixed; top: 10px; left: 10px; z-index: 10000; background: rgba(255,255,255,0.85); padding: 8px 12px; border-radius: 8px; font-family: sans-serif; pointer-events: auto; }
   </style>
 </head>
 <body>
@@ -31,12 +46,19 @@
     
     <a-camera gps-camera rotation-reader></a-camera>
 
-    <!-- Panah 3D menuju lokasi tujuan -->
-    <a-entity id="arrow"
-      gltf-model="https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Arrow/glTF/Arrow.gltf"
-      scale="5 5 5"
-      gps-entity-place="latitude: 0; longitude: 0;"
-      visible="false">
+    <!-- Panah 3D menuju lokasi tujuan
+         Struktur:
+         - parent entity memiliki gps-entity-place (anchor)
+         - child berisi model dengan offset position sehingga model muncul beberapa meter di depan anchor -->
+    <a-entity id="arrow" gps-entity-place="latitude: 0; longitude: 0;" visible="false">
+      <a-entity
+        id="arrow-model"
+        gltf-model="https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Arrow/glTF/Arrow.gltf"
+        scale="0.5 0.5 0.5"        <!-- perkecil model supaya tidak 'zoom' -->
+        position="0 0 -5"         <!-- letakkan 5m di depan anchor -->
+        rotation="0 180 0"
+        >
+      </a-entity>
     </a-entity>
   </a-scene>
 
@@ -67,6 +89,7 @@
         // Jika panah belum muncul, tampilkan dan set koordinat target
         if (!arrow.getAttribute('visible')) {
           arrow.setAttribute('visible', 'true');
+          // set gps pada parent entity
           arrow.setAttribute('gps-entity-place', `latitude: ${target.lat}; longitude: ${target.lon};`);
           console.log("Panah diarahkan ke:", target.lat, target.lon);
         }
