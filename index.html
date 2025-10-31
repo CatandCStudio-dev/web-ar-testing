@@ -1,92 +1,52 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>WebXR Ground Tracking dan Penempatan Objek Otomatis</title>
+    <title>AR.js Location-Based Sempurna</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script> 
     
-    <script>
-        // ===============================================
-        // KOMPONEN KUSTOM: PLACE ON HIT
-        // Logika untuk mendeteksi permukaan dan menempatkan objek
-        // ===============================================
-        AFRAME.registerComponent('place-on-hit', {
-            init: function () {
-                const el = this.el;
-                
-                // 1. Buat Reticle (target)
-                this.reticle = document.createElement('a-ring');
-                this.reticle.setAttribute('radius', '0.1');
-                this.reticle.setAttribute('color', 'green');
-                this.reticle.setAttribute('rotation', '-90 0 0'); // Menghadap ke atas
-                this.reticle.setAttribute('visible', 'false'); // Sembunyikan sampai permukaan terdeteksi
-                el.appendChild(this.reticle);
-
-                // 2. Event Listener untuk Mendeteksi Permukaan
-                el.sceneEl.addEventListener('ar-hit-test-result', (event) => {
-                    // Cek apakah ada permukaan yang terdeteksi
-                    if (event.detail.results.length > 0) {
-                        const hit = event.detail.results[0];
-                        // Posisikan reticle ke lokasi hit-test
-                        this.reticle.setAttribute('position', hit.position);
-                        this.reticle.setAttribute('visible', 'true');
-                    } else {
-                        // Jika tidak ada permukaan yang terdeteksi
-                        this.reticle.setAttribute('visible', 'false');
-                    }
-                });
-
-                // 3. Event Listener untuk Penempatan Objek saat diketuk/klik
-                el.sceneEl.addEventListener('touchstart', (event) => {
-                    // Pastikan reticle terlihat (berarti ada permukaan)
-                    if (this.reticle.getAttribute('visible')) {
-                        // Duplikasi posisi reticle
-                        const position = this.reticle.getAttribute('position');
-
-                        // Buat objek baru (misalnya, a-box)
-                        const newObject = document.createElement('a-box');
-                        newObject.setAttribute('material', { color: 'red' });
-                        // Tambahkan 0.5 pada sumbu Y agar objek berdiri di atas tanah (0,0)
-                        newObject.setAttribute('position', position.x + ' ' + (position.y + 0.5) + ' ' + position.z); 
-                        newObject.setAttribute('scale', '0.5 0.5 0.5');
-                        
-                        // Tambahkan objek ke scene
-                        el.sceneEl.appendChild(newObject);
-                    }
-                });
-            }
-        });
-
-        // ===============================================
-        // FUNGSI AUTO-ENTER AR (Memicu AR setelah interaksi)
-        // Karena browser modern memerlukan interaksi pengguna untuk mengaktifkan kamera.
-        // ===============================================
-        function autoEnterAR() {
-            const scene = document.querySelector('a-scene');
-            
-            if (scene) {
-                // Tunggu sampai scene dimuat sepenuhnya
-                scene.addEventListener('loaded', () => {
-                    // Tambahkan event listener ke BODY untuk sentuhan pertama
-                    document.body.addEventListener('touchstart', (e) => {
-                        // Cek jika scene sudah dimuat dan belum dalam AR mode
-                        if (scene.hasLoaded && !scene.is('ar-mode')) {
-                            console.log('User interacted. Entering AR Mode...');
-                            scene.enterAR();
-                        }
-                    }, { once: true }); // { once: true } memastikan listener dihapus setelah satu kali pemicuan
-                });
-            }
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
         }
-
-        // Panggil fungsi segera setelah skrip dimuat
-        autoEnterAR();
-
-    </script>
+    </style>
 </head>
 <body style='margin : 0px; overflow: hidden;'>
 
-    <a-scene>
-      <a-box position="0 1 -3" rotation="0 45 0" color="blue"></a-box>
+    <a-scene
+        vr-mode-ui="enabled: false"
+        embedded
+        arjs='sourceType: webcam; debugUIEnabled: false;'  >
+        
+        <a-cylinder 
+            material="color: gold; opacity: 0.8" 
+            radius="10" 
+            height="30"
+            position="0 15 0"  
+            scale="1 1 1"
+            rotation="0 0 0"
+            shadow
+            gps-entity-place="latitude: -7.543022950017591; longitude: 110.7699083655215;"
+        >
+            <a-text
+                value="OBJECK AR LOKASI"
+                position="0 15.5 0"
+                scale="15 15 15"
+                align="center"
+                look-at="[gps-camera]" 
+                color="#FFFFFF"
+            ></a-text>
+        </a-cylinder>
+
+        <a-camera 
+            gps-camera 
+            rotation-reader 
+        ></a-camera>
+        
     </a-scene>
 
 </body>
