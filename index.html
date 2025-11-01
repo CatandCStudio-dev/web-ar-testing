@@ -2,10 +2,10 @@
 <html lang="id">
 <head>
   <meta charset="utf-8" />
-  <title>AR GPS Navigation Simple</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AR GPS Arrow</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
-  <!-- A-Frame + AR.js -->
+  <!-- A-Frame + AR.js (GPS Mode) -->
   <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.0/aframe/build/aframe-ar-nft.js"></script>
 
@@ -14,76 +14,51 @@
     #info {
       position: fixed;
       top: 10px; left: 10px;
-      background: rgba(255,255,255,0.85);
+      background: rgba(0,0,0,0.7);
+      color: white;
       padding: 8px 12px;
       border-radius: 8px;
       font-family: sans-serif;
+      font-size: 14px;
       z-index: 9999;
     }
   </style>
 </head>
 <body>
-  <div id="info">Mengambil lokasi GPS... 🔄</div>
+  <div id="info">📡 Mengambil lokasi...</div>
 
   <a-scene
-    vr-mode-ui="enabled: false"
     embedded
-    arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;">
+    vr-mode-ui="enabled: false"
+    arjs="sourceType: webcam; trackingMethod: best; debugUIEnabled: false;">
     
-    <!-- Kamera GPS -->
+    <!-- Kamera AR berbasis GPS -->
     <a-camera gps-camera rotation-reader></a-camera>
 
-    <!-- Panah ke target -->
+    <!-- Model panah -->
     <a-entity id="arrow"
+      gps-entity-place="latitude: -7.5425223; longitude: 110.7700842"
       gltf-model="https://raw.githubusercontent.com/CatandCStudio-dev/web-ar-testing/test-ar-js/Assets/arrow.glb"
       scale="5 5 5"
-      rotation="0 0 0"
-      visible="false">
+      rotation="0 0 0">
     </a-entity>
   </a-scene>
 
   <script>
-    // === Koordinat Tujuan ===
-    const TARGET = { lat: -7.5425223, lon: 110.7700842 }; // ubah sesuai tujuan kamu
-    const arrow = document.getElementById('arrow');
     const info = document.getElementById('info');
+    const arrow = document.getElementById('arrow');
 
-    // === Ketika GPS Kamera Siap ===
+    // Update posisi pengguna
     window.addEventListener('gps-camera-update-position', (e) => {
       const userLat = e.detail.position.latitude;
       const userLon = e.detail.position.longitude;
-
-      // Hanya set sekali posisi target
-      if (!arrow.getAttribute('visible')) {
-        arrow.setAttribute('gps-entity-place', `latitude: ${TARGET.lat}; longitude: ${TARGET.lon};`);
-        arrow.setAttribute('visible', 'true');
-        console.log("🎯 Panah diarahkan ke:", TARGET.lat, TARGET.lon);
-        info.innerHTML = `✅ Panah diarahkan ke target.<br>Posisi Anda:<br>${userLat.toFixed(5)}, ${userLon.toFixed(5)}`;
-      }
-
-      // Hitung jarak & arah
-      const dist = distance(userLat, userLon, TARGET.lat, TARGET.lon);
-      info.innerHTML = `📍 Anda di: ${userLat.toFixed(5)}, ${userLon.toFixed(5)}<br>🎯 Jarak ke target: ${dist.toFixed(1)} m`;
+      info.innerHTML = `📍 Lokasi Anda:<br>${userLat.toFixed(5)}, ${userLon.toFixed(5)}`;
     });
 
-    // === Fungsi Haversine untuk jarak (meter) ===
-    function distance(lat1, lon1, lat2, lon2) {
-      const R = 6371e3;
-      const toRad = x => x * Math.PI / 180;
-      const φ1 = toRad(lat1);
-      const φ2 = toRad(lat2);
-      const Δφ = toRad(lat2 - lat1);
-      const Δλ = toRad(lon2 - lon1);
-      const a = Math.sin(Δφ / 2) ** 2 +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ / 2) ** 2;
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      return R * c;
-    }
-
-    // === Debug saat model dimuat ===
+    // Debug jika model sudah dimuat
     arrow.addEventListener('model-loaded', () => {
-      console.log("✅ Model panah dimuat!");
+      console.log("✅ Model panah berhasil dimuat!");
+      info.innerHTML = "✅ Model panah dimuat dan siap.";
     });
   </script>
 </body>
