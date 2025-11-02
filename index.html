@@ -75,27 +75,43 @@
         if (d > totalDistance) break;
         const point = getDestinationPoint(startLat, startLon, bearing, d);
 
+        // buat entity panah yang awalnya menggunakan gps-entity-place
         const arrow = document.createElement('a-entity');
         arrow.setAttribute('gltf-model', ARROW_MODEL);
         arrow.setAttribute('scale', '1.5 1.5 1.5');
-        // set gps pada parent sehingga posisi world tetap
         arrow.setAttribute('gps-entity-place', `latitude: ${point.lat}; longitude: ${point.lon}`);
-        // tambahkan dulu ke scene
         container.appendChild(arrow);
 
-        // tunggu model termuat lalu set rotasi via object3D agar menghadap bearing
+        // ketika model sudah termuat, tunggu sebentar supaya AR.js sudah meng-position-kan entity
         arrow.addEventListener('model-loaded', () => {
-          try {
-            const yaw = (bearing + MODEL_YAW_OFFSET) % 360;
-            // pastikan THREE tersedia
-            if (window.THREE && arrow.object3D) {
+          // beri waktu singkat agar gps-entity-place sudah menghitung posisi world
+          setTimeout(() => {
+            try {
+              // baca posisi world saat ini
+              const worldPos = new THREE.Vector3();
+              arrow.object3D.getWorldPosition(worldPos);
+
+              // set rotasi agar menghadap bearing
+              const yaw = (bearing + MODEL_YAW_OFFSET) % 360;
               arrow.object3D.rotation.set(0, THREE.Math.degToRad(yaw), 0);
-            } else {
-              console.warn('THREE atau object3D tidak tersedia untuk rotasi panah.');
+
+              // 'lock' posisi: pindahkan posisi lokal ke worldPos lalu hapus gps-entity-place
+              // supaya AR.js tidak lagi meng-update transform entity ini
+              // (set worldPos sebagai posisi lokal terhadap scene)
+              arrow.object3D.position.copy(worldPos);
+              // pastikan tidak ada parent transform yang mengubahnya:
+              // ubah posisi ke atribut A-Frame juga (optional)
+              arrow.setAttribute('position', `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
+
+              // hapus atribut gps-entity-place sehingga tidak di-update lagi
+              arrow.removeAttribute('gps-entity-place');
+
+              // disable matrix auto update jika ingin mengunci lebih agresif
+              arrow.object3D.matrixAutoUpdate = false;
+            } catch (err) {
+              console.warn('Gagal mengunci panah:', err);
             }
-          } catch (err) {
-            console.warn('Gagal set rotation pada arrow:', err);
-          }
+          }, 600); // sesuaikan delay jika perlu (500-1200ms)
         });
       }
     }
