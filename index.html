@@ -11,17 +11,84 @@
 </head>
 <body>
 
-<!-- Starting an immersive WebXR session requires user interaction.
-    We start this one with a simple button. -->
 <button onclick="activateXR()">Start Hello WebXR</button>
+
 <script>
 async function activateXR() {
-  // Add a canvas element and initialize a WebGL context that is compatible with WebXR.
-  const canvas = document.createElement("canvas");
-  document.body.appendChild(canvas);
-  const gl = canvas.getContext("webgl", {xrCompatible: true});
+  if (!navigator.xr) {
+    alert('WebXR not supported on this device/browser.');
+    return;
+  }
 
-  // To be continued in upcoming steps.
+  // Buat canvas + context WebGL XR-compatible terlebih dahulu
+  const canvas = document.createElement('canvas');
+  document.body.appendChild(canvas);
+  const gl = canvas.getContext('webgl', { xrCompatible: true });
+  await gl.makeXRCompatible();
+
+  // Buat scene dan objek
+  const scene = new THREE.Scene();
+  const materials = [
+    new THREE.MeshBasicMaterial({color: 0xff0000}),
+    new THREE.MeshBasicMaterial({color: 0x0000ff}),
+    new THREE.MeshBasicMaterial({color: 0x00ff00}),
+    new THREE.MeshBasicMaterial({color: 0xff00ff}),
+    new THREE.MeshBasicMaterial({color: 0x00ffff}),
+    new THREE.MeshBasicMaterial({color: 0xffff00})
+  ];
+  const cube = new THREE.Mesh(new THREE.BoxBufferGeometry(0.2, 0.2, 0.2), materials);
+  cube.position.set(1, 1, 1);
+  scene.add(cube);
+
+  // Buat renderer menggunakan canvas + gl yang sudah dibuat
+  const renderer = new THREE.WebGLRenderer({
+    alpha: true,
+    preserveDrawingBuffer: true,
+    canvas: canvas,
+    context: gl
+  });
+  renderer.autoClear = false;
+
+  // Request AR session
+  const session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['local'] });
+
+  // Pasang XRWebGLLayer ke session
+  session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+
+  // Minta reference space sebelum memulai loop frame
+  const referenceSpace = await session.requestReferenceSpace('local');
+
+  // Camera (matriks dikontrol langsung oleh WebXR)
+  const camera = new THREE.PerspectiveCamera();
+  camera.matrixAutoUpdate = false;
+
+  // Render loop
+  function onXRFrame(time, frame) {
+    session.requestAnimationFrame(onXRFrame);
+
+    // Bind framebuffer yang disediakan WebXR
+    gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
+
+    const pose = frame.getViewerPose(referenceSpace);
+    if (pose) {
+      // Biasanya hanya satu view di mobile AR
+      const view = pose.views[0];
+      const viewport = session.renderState.baseLayer.getViewport(view);
+      renderer.setSize(viewport.width, viewport.height, false);
+
+      // Masukkan matriks dari WebXR ke camera three.js
+      camera.matrix.fromArray(view.transform.matrix);
+      camera.projectionMatrix.fromArray(view.projectionMatrix);
+      camera.updateMatrixWorld(true);
+
+      // Render scene
+      renderer.clearDepth();
+      renderer.render(scene, camera);
+    }
+  }
+
+  // Mulai loop render
+  session.requestAnimationFrame(onXRFrame);
 }
 </script>
 </body>
