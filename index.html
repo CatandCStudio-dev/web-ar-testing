@@ -50,27 +50,53 @@
     // Jarak antar panah (meter)
     const STEP = 10;
 
-    // Fungsi membuat deretan panah dari posisi pengguna ke target
-    function createArrowPath(userLat, userLon, targetLat, targetLon) {
-      // Hapus panah lama
+    // offset rotasi model (ubah jika model menghadap axis lain)
+    const MODEL_YAW_OFFSET = 180; // contoh: model default menghadap -Z, tambahkan 180°
+
+    // flag supaya titik hanya di-generate sekali dari posisi awal
+    let arrowsCreated = false;
+    let startPosition = null;
+
+    // Fungsi membuat deretan panah dari posisi START ke target (titik tetap)
+    function createArrowPathFromStart(startLat, startLon, targetLat, targetLon) {
+      // Hapus panah lama (jika ada)
       while (container.firstChild) container.removeChild(container.firstChild);
 
-      const totalDistance = getDistance(userLat, userLon, targetLat, targetLon);
-      const bearing = getBearing(userLat, userLon, targetLat, targetLon);
+      const totalDistance = getDistance(startLat, startLon, targetLat, targetLon);
+      const bearing = getBearing(startLat, startLon, targetLat, targetLon);
 
-      const numArrows = Math.floor(totalDistance / STEP);
-      info.innerHTML += `<br>🪶 Membuat ${numArrows} panah...`;
+      const numArrows = Math.max(1, Math.floor(totalDistance / STEP));
+      info.innerHTML += `<br>🪶 Membuat ${numArrows} panah (fixed) ...`;
 
+      // buat panah pada titik-titik sepanjang garis start->target
       for (let i = 1; i <= numArrows; i++) {
         const d = STEP * i;
-        const point = getDestinationPoint(userLat, userLon, bearing, d);
+        // jangan melebihi target (last point <= totalDistance)
+        if (d > totalDistance) break;
+        const point = getDestinationPoint(startLat, startLon, bearing, d);
 
         const arrow = document.createElement('a-entity');
         arrow.setAttribute('gltf-model', ARROW_MODEL);
         arrow.setAttribute('scale', '1.5 1.5 1.5');
-        arrow.setAttribute('rotation', `0 ${bearing} 0`);
+        // set gps pada parent sehingga posisi world tetap
         arrow.setAttribute('gps-entity-place', `latitude: ${point.lat}; longitude: ${point.lon}`);
+        // tambahkan dulu ke scene
         container.appendChild(arrow);
+
+        // tunggu model termuat lalu set rotasi via object3D agar menghadap bearing
+        arrow.addEventListener('model-loaded', () => {
+          try {
+            const yaw = (bearing + MODEL_YAW_OFFSET) % 360;
+            // pastikan THREE tersedia
+            if (window.THREE && arrow.object3D) {
+              arrow.object3D.rotation.set(0, THREE.Math.degToRad(yaw), 0);
+            } else {
+              console.warn('THREE atau object3D tidak tersedia untuk rotasi panah.');
+            }
+          } catch (err) {
+            console.warn('Gagal set rotation pada arrow:', err);
+          }
+        });
       }
     }
 
@@ -85,11 +111,16 @@
       info.innerHTML = `
         📍 Posisi Anda: ${userLat.toFixed(5)}, ${userLon.toFixed(5)}<br>
         🎯 Tujuan: ${TARGET.lat.toFixed(5)}, ${TARGET.lon.toFixed(5)}<br>
-        📏 Jarak: ${distance.toFixed(1)} m<br>
-        🧭 Arah: ${bearing.toFixed(1)}°
+        📏 Jarak saat ini: ${distance.toFixed(1)} m<br>
+        🧭 Bearing saat ini: ${bearing.toFixed(1)}°
       `;
 
-      createArrowPath(userLat, userLon, TARGET.lat, TARGET.lon);
+      // jika belum dibuat, gunakan posisi pertama sebagai start dan buat titik tetap
+      if (!arrowsCreated) {
+        arrowsCreated = true;
+        startPosition = { lat: userLat, lon: userLon };
+        createArrowPathFromStart(startPosition.lat, startPosition.lon, TARGET.lat, TARGET.lon);
+      }
     });
 
     // ====== Fungsi utilitas ======
