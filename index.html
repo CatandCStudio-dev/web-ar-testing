@@ -2,13 +2,12 @@
 <html lang="id">
 <head>
   <meta charset="utf-8" />
-  <title>AR GPS Arrow</title>
+  <title>AR GPS Navigation Arrow</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
-  <!-- A-Frame + AR.js (GPS Mode) -->
+  <!-- A-Frame + AR.js versi stabil -->
   <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.3.2/aframe/build/aframe-ar-nft.js"></script>
-
 
   <style>
     body, html { margin: 0; padding: 0; overflow: hidden; }
@@ -28,6 +27,7 @@
 <body>
   <div id="info">📡 Mengambil lokasi...</div>
 
+  <!-- Scene AR -->
   <a-scene
     embedded
     vr-mode-ui="enabled: false"
@@ -36,12 +36,11 @@
     <!-- Kamera AR berbasis GPS -->
     <a-camera gps-camera rotation-reader></a-camera>
 
-    <!-- Model panah -->
+    <!-- Panah menuju target -->
     <a-entity id="arrow"
-      gps-entity-place="latitude: -7.5425223; longitude: 110.7700842"
       gltf-model="https://raw.githubusercontent.com/CatandCStudio-dev/web-ar-testing/test-ar-js/Assets/arrow.glb"
-      scale="1 1 1"
-      rotation="0 0 0">
+      scale="2 2 2"
+      visible="false">
     </a-entity>
   </a-scene>
 
@@ -49,17 +48,63 @@
     const info = document.getElementById('info');
     const arrow = document.getElementById('arrow');
 
-    // Update posisi pengguna
+    // === Tujuan navigasi ===
+    const TARGET = { lat: -7.5425223, lon: 110.7700842 };
+
+    // Saat posisi pengguna diperbarui oleh GPS
     window.addEventListener('gps-camera-update-position', (e) => {
       const userLat = e.detail.position.latitude;
       const userLon = e.detail.position.longitude;
-      info.innerHTML = `📍 Lokasi Anda:<br>${userLat.toFixed(5)}, ${userLon.toFixed(5)}`;
+
+      // Set lokasi panah hanya sekali
+      if (!arrow.getAttribute('visible')) {
+        arrow.setAttribute('gps-entity-place', `latitude: ${TARGET.lat}; longitude: ${TARGET.lon}`);
+        arrow.setAttribute('visible', 'true');
+        console.log("🎯 Panah muncul di lokasi target.");
+      }
+
+      // Hitung jarak dan arah
+      const distance = getDistance(userLat, userLon, TARGET.lat, TARGET.lon);
+      const bearing = getBearing(userLat, userLon, TARGET.lat, TARGET.lon);
+
+      // Update arah panah (rotasi Y)
+      arrow.setAttribute('rotation', `0 ${bearing} 0`);
+
+      info.innerHTML = `
+        📍 Posisi Anda: ${userLat.toFixed(5)}, ${userLon.toFixed(5)}<br>
+        🎯 Tujuan: ${TARGET.lat.toFixed(5)}, ${TARGET.lon.toFixed(5)}<br>
+        📏 Jarak: ${distance.toFixed(1)} m<br>
+        🧭 Arah: ${bearing.toFixed(1)}°
+      `;
     });
 
-    // Debug jika model sudah dimuat
+    // Hitung jarak (meter) menggunakan rumus Haversine
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const toRad = x => x * Math.PI / 180;
+      const φ1 = toRad(lat1), φ2 = toRad(lat2);
+      const Δφ = toRad(lat2 - lat1);
+      const Δλ = toRad(lon2 - lon1);
+      const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    // Hitung arah (bearing) dalam derajat dari posisi user ke target
+    function getBearing(lat1, lon1, lat2, lon2) {
+      const toRad = x => x * Math.PI / 180;
+      const toDeg = x => x * 180 / Math.PI;
+      const φ1 = toRad(lat1), φ2 = toRad(lat2);
+      const Δλ = toRad(lon2 - lon1);
+      const y = Math.sin(Δλ) * Math.cos(φ2);
+      const x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+      const brng = Math.atan2(y, x);
+      return (toDeg(brng) + 360) % 360;
+    }
+
+    // Debug saat model panah dimuat
     arrow.addEventListener('model-loaded', () => {
-      console.log("✅ Model panah berhasil dimuat!");
-      info.innerHTML = "✅ Model panah dimuat dan siap.";
+      console.log("✅ Model panah dimuat!");
     });
   </script>
 </body>
