@@ -3,72 +3,63 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WebXR AR Reticle + Hit Test</title>
+  <title>WebXR Ground Plane Visualization</title>
   <style>
-    body { margin: 0; font-family: system-ui, sans-serif; }
-    #info { position: absolute; left: 10px; top: 10px; z-index: 1; background: rgba(0,0,0,0.4); color: white; padding: 8px 10px; border-radius: 6px; }
-    canvas { display:block }
+    body { margin: 0; overflow: hidden; }
+    #info { position: absolute; top: 10px; left: 10px; padding: 6px 10px; color: #fff; background: rgba(0,0,0,0.5); border-radius: 5px; font-family: sans-serif; }
   </style>
 </head>
 <body>
-  <div id="info">Tapping screen places an object on the reticle (ring). Use on a WebXR-capable device.</div>
-
+  <div id="info">Menunjukkan sinar dan hasil hit-test pada permukaan datar</div>
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.158.0/build/three.module.js';
     import { ARButton } from 'https://unpkg.com/three@0.158.0/examples/jsm/webxr/ARButton.js';
 
     let camera, scene, renderer;
-    let reticle;
-    let hitTestSource = null;
-    let hitTestSourceRequested = false;
-    let localReferenceSpace = null;
+    let reticle, rayLine, hitPoint, hitTestSource = null, hitTestSourceRequested = false, localReferenceSpace = null;
 
     init();
 
     function init() {
-      const container = document.createElement('div');
-      document.body.appendChild(container);
-
       scene = new THREE.Scene();
-
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-      // Light
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
       scene.add(light);
 
-      // Renderer
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
-      container.appendChild(renderer.domElement);
+      document.body.appendChild(renderer.domElement);
 
-      // AR Button (request hit-test feature)
-      document.body.appendChild(ARButton.createButton(renderer, {
-        requiredFeatures: ['hit-test']
-      }));
+      document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
 
-      // Reticle (ring)
-      const geometry = new THREE.RingGeometry(0.06, 0.09, 32);
-      const material = new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
-      reticle = new THREE.Mesh(geometry, material);
-      reticle.rotation.x = - Math.PI / 2; // align flat on horizontal surface
+      // Reticle (cincin)
+      const ringGeo = new THREE.RingGeometry(0.05, 0.08, 32);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, opacity: 0.8, transparent: true });
+      reticle = new THREE.Mesh(ringGeo, ringMat);
+      reticle.rotation.x = -Math.PI / 2;
       reticle.visible = false;
       scene.add(reticle);
 
-      // A simple object to place (prototype) - we'll clone this each time
-      const boxGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-      const boxMat = new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0.1 });
-      window.protoPlacedObject = new THREE.Mesh(boxGeo, boxMat);
+      // Ray visualizer (garis)
+      const rayGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, -1)
+      ]);
+      const rayMat = new THREE.LineBasicMaterial({ color: 0xff0000 });
+      rayLine = new THREE.Line(rayGeo, rayMat);
+      scene.add(rayLine);
 
-      // Handle taps
-      renderer.domElement.addEventListener('touchstart', onSelect, true);
-      renderer.domElement.addEventListener('click', onSelect, true);
+      // Titik hasil hit-test (bola kecil)
+      const pointGeo = new THREE.SphereGeometry(0.01, 16, 16);
+      const pointMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+      hitPoint = new THREE.Mesh(pointGeo, pointMat);
+      hitPoint.visible = false;
+      scene.add(hitPoint);
 
       window.addEventListener('resize', onWindowResize);
-
-      // Animation loop
       renderer.setAnimationLoop(render);
     }
 
@@ -78,47 +69,23 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    function onSelect(event) {
-      // Only place when reticle is visible
-      if (!reticle.visible) return;
-
-      const placed = window.protoPlacedObject.clone();
-      // copy position & orientation from reticle
-      placed.position.setFromMatrixPosition(reticle.matrix);
-      placed.quaternion.setFromRotationMatrix(reticle.matrix);
-      // lift slightly so it sits nicely on top
-      placed.position.y += 0.04;
-      scene.add(placed);
-    }
-
-    // Render loop: do hit-test each frame
     function render(timestamp, frame) {
       if (frame) {
         const session = renderer.xr.getSession();
 
         if (!localReferenceSpace) {
-          // Create a local reference space for placing objects
-          session.requestReferenceSpace('local').then((refSpace) => {
-            localReferenceSpace = refSpace;
-          }).catch((err) => {
-            console.warn('requestReferenceSpace(local) failed:', err);
-          });
+          session.requestReferenceSpace('local').then(ref => localReferenceSpace = ref);
         }
 
         if (!hitTestSourceRequested) {
-          const viewerSpacePromise = session.requestReferenceSpace('viewer');
-          viewerSpacePromise.then((viewerSpace) => {
-            session.requestHitTestSource({ space: viewerSpace }).then((source) => {
-              hitTestSource = source;
-            });
+          session.requestReferenceSpace('viewer').then((viewerSpace) => {
+            session.requestHitTestSource({ space: viewerSpace }).then((source) => hitTestSource = source);
           });
-
           session.addEventListener('end', () => {
             hitTestSourceRequested = false;
             hitTestSource = null;
             localReferenceSpace = null;
           });
-
           hitTestSourceRequested = true;
         }
 
@@ -129,16 +96,25 @@
             const hit = hitTestResults[0];
             const pose = hit.getPose(localReferenceSpace);
 
-            // Apply the hit pose to the reticle
             reticle.visible = true;
             reticle.matrix.fromArray(pose.transform.matrix);
             reticle.matrix.decompose(reticle.position, reticle.quaternion, reticle.scale);
+
+            // Tampilkan titik hasil hit-test
+            hitPoint.visible = true;
+            hitPoint.position.copy(reticle.position);
+
+            // Update rayLine dari kamera ke reticle
+            const start = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
+            const end = reticle.position.clone();
+            const points = [start, end];
+            rayLine.geometry.setFromPoints(points);
           } else {
             reticle.visible = false;
+            hitPoint.visible = false;
           }
         }
       }
-
       renderer.render(scene, camera);
     }
   </script>
