@@ -49,9 +49,9 @@
   let localSpace = null;
   let surfaceDetected = false;
   let scanningText = document.getElementById("scanning-text");
+  let navigationSpheres = [];
 
   init();
-  animate();
 
   async function init() {
     // Setup renderer
@@ -72,7 +72,7 @@
     reticle.visible = false;
     scene.add(reticle);
 
-    // Start AR session on user tap
+    // Overlay start
     const overlay = document.createElement("div");
     overlay.textContent = "👆 Tap to Start AR Navigation";
     Object.assign(overlay.style, {
@@ -81,7 +81,6 @@
       fontSize: "22px", cursor: "pointer", zIndex: 100
     });
     document.body.appendChild(overlay);
-
     overlay.addEventListener("click", async () => {
       overlay.remove();
       startAR();
@@ -119,20 +118,34 @@
     hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
     localSpace = refSpace;
 
-    // Tambahkan bola arah depan
-    for (let i = 1; i <= 5; i++) {
-      const sphereGeo = new THREE.SphereGeometry(0.05);
-      const sphereMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.5 });
-      const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-      sphere.position.set(0, 0, -i * 0.5); // spawn di depan kamera berturut-turut
-      camera.add(sphere);
-    }
+    // 🎯 Dummy tujuan: bola-bola biru di depan pengguna
+    addNavigationSpheres();
 
     renderer.setAnimationLoop(render);
   }
 
-  function animate() {
-    renderer.setAnimationLoop(render);
+  function addNavigationSpheres() {
+    // Hapus bola lama (kalau ada)
+    navigationSpheres.forEach(b => scene.remove(b));
+    navigationSpheres = [];
+
+    // Tambahkan 5 bola biru ke arah depan (dummy tujuan)
+    for (let i = 1; i <= 5; i++) {
+      const sphereGeo = new THREE.SphereGeometry(0.1, 16, 16);
+      const sphereMat = new THREE.MeshBasicMaterial({
+        color: 0x00aaff,
+        transparent: true,
+        opacity: 0.6
+      });
+      const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+
+      // 🔸 Posisi dummy: 0.5 meter di depan pengguna per bola
+      sphere.position.set(0, 0, -i * 0.5);
+      sphere.userData = { distance: i * 0.5 };
+
+      scene.add(sphere);
+      navigationSpheres.push(sphere);
+    }
   }
 
   function render(timestamp, frame) {
@@ -155,6 +168,7 @@
         }
       }
     }
+
     renderer.render(scene, camera);
   }
   </script>
