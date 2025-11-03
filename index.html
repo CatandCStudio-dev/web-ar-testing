@@ -1,19 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>AR Navigation Prototype</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta charset="utf-8" />
+  <title>AR Navigation Dummy</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <style>
     body { margin: 0; overflow: hidden; }
-    #map {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      height: 30vh; /* 1/3 layar */
-      z-index: 10;
-    }
     #scanning-text {
       position: absolute;
       top: 50%;
@@ -23,140 +15,195 @@
       font-size: 24px;
       font-family: Arial, sans-serif;
       text-shadow: 0 0 10px black;
-      background: rgba(0,0,0,0.4);
+      background: rgba(0, 0, 0, 0.4);
       padding: 12px 20px;
       border-radius: 8px;
       display: none;
       animation: pulse 1.5s infinite;
-      z-index: 5;
     }
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
     }
   </style>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 </head>
 <body>
   <div id="scanning-text">🔍 Scanning environment...</div>
-  <div id="map"></div>
 
   <script type="module">
-  import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+    import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+    import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
-  let camera, scene, renderer, reticle;
-  let hitTestSource = null;
-  let localSpace = null;
-  let surfaceDetected = false;
-  let scanningText = document.getElementById("scanning-text");
+    let camera, scene, renderer, reticle;
+    let controller;
+    let scanningText = document.getElementById("scanning-text");
+    let surfaceDetected = false;
+    let hitTestSource = null;
+    let localSpace = null;
+    let userPosition = null;
 
-  init();
-  animate();
+    // 🌐 Ubah tujuan dummy di sini
+    const targetLocation = {
+      lat: -7.542744073687371,  // contoh: UMS
+      lon: 110.77000009438967
+    };
 
-  async function init() {
-    // Setup renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.xr.enabled = true;
-    document.body.appendChild(renderer.domElement);
+    init();
+    animate();
 
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
+    function init() {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
 
-    // Reticle
-    const ringGeo = new THREE.RingGeometry(0.1, 0.11, 32).rotateX(-Math.PI / 2);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-    reticle = new THREE.Mesh(ringGeo, ringMat);
-    reticle.matrixAutoUpdate = false;
-    reticle.visible = false;
-    scene.add(reticle);
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+      scene.add(camera);
 
-    // Start AR session on user tap
-    const overlay = document.createElement("div");
-    overlay.textContent = "👆 Tap to Start AR Navigation";
-    Object.assign(overlay.style, {
-      position: "fixed", inset: 0, background: "black", color: "white",
-      display: "flex", justifyContent: "center", alignItems: "center",
-      fontSize: "22px", cursor: "pointer", zIndex: 100
-    });
-    document.body.appendChild(overlay);
+      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+      scene.add(light);
 
-    overlay.addEventListener("click", async () => {
-      overlay.remove();
-      startAR();
-    });
+      const geometry = new THREE.RingGeometry(0.1, 0.11, 32).rotateX(-Math.PI / 2);
+      const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+      reticle = new THREE.Mesh(geometry, material);
+      reticle.matrixAutoUpdate = false;
+      reticle.visible = false;
+      scene.add(reticle);
 
-    // 🗺️ Setup map (Leaflet)
-    const L = await import("https://unpkg.com/leaflet/dist/leaflet-src.esm.js");
-    const map = L.map('map').setView([0, 0], 18);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19
-    }).addTo(map);
-    const userMarker = L.marker([0, 0]).addTo(map);
+      controller = renderer.xr.getController(0);
+      controller.addEventListener("select", onSelect);
+      scene.add(controller);
 
-    // Update GPS
-    navigator.geolocation.watchPosition((pos) => {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-      map.setView([lat, lon], 18);
-      userMarker.setLatLng([lat, lon]);
-    });
-  }
+      const arButton = ARButton.createButton(renderer, { requiredFeatures: ["hit-test"] });
+      document.body.appendChild(arButton);
 
-  async function startAR() {
-    const session = await navigator.xr.requestSession("immersive-ar", {
-      requiredFeatures: ["hit-test", "dom-overlay"],
-      domOverlay: { root: document.body }
-    });
-    renderer.xr.setReferenceSpaceType("local");
-    await renderer.xr.setSession(session);
+      renderer.xr.addEventListener('sessionstart', () => {
+        scanningText.style.display = 'block';
+        surfaceDetected = false;
+        getUserLocation();
+      });
 
-    scanningText.style.display = 'block';
+      renderer.xr.addEventListener('sessionend', () => {
+        scanningText.style.display = 'none';
+        reticle.visible = false;
+        surfaceDetected = false;
+      });
 
-    const refSpace = await session.requestReferenceSpace("local");
-    const viewerSpace = await session.requestReferenceSpace("viewer");
-    hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
-    localSpace = refSpace;
-
-    // Tambahkan bola arah depan
-    for (let i = 1; i <= 5; i++) {
-      const sphereGeo = new THREE.SphereGeometry(0.05);
-      const sphereMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.5 });
-      const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-      sphere.position.set(0, 0, -i * 0.5); // spawn di depan kamera berturut-turut
-      camera.add(sphere);
+      window.addEventListener("resize", onWindowResize);
     }
 
-    renderer.setAnimationLoop(render);
-  }
-
-  function animate() {
-    renderer.setAnimationLoop(render);
-  }
-
-  function render(timestamp, frame) {
-    if (frame && hitTestSource) {
-      const hitTestResults = frame.getHitTestResults(hitTestSource);
-      if (hitTestResults.length > 0) {
-        const hit = hitTestResults[0];
-        const pose = hit.getPose(localSpace);
-        reticle.visible = true;
-        reticle.matrix.fromArray(pose.transform.matrix);
-        if (!surfaceDetected) {
-          surfaceDetected = true;
-          scanningText.style.display = 'none';
-        }
-      } else {
-        reticle.visible = false;
-        if (surfaceDetected) {
-          surfaceDetected = false;
-          scanningText.style.display = 'block';
-        }
+    function onSelect() {
+      if (reticle.visible) {
+        const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+        const material = new THREE.MeshPhongMaterial({ color: 0x44aa88 });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.setFromMatrixPosition(reticle.matrix);
+        scene.add(mesh);
       }
     }
-    renderer.render(scene, camera);
-  }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    async function render(timestamp, frame) {
+      if (frame) {
+        const referenceSpace = renderer.xr.getReferenceSpace();
+        const session = renderer.xr.getSession();
+
+        if (!hitTestSource) {
+          const viewerSpace = await session.requestReferenceSpace("viewer");
+          hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+          localSpace = referenceSpace;
+        }
+
+        const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+        if (hitTestResults.length > 0) {
+          const hit = hitTestResults[0];
+          const pose = hit.getPose(localSpace);
+          reticle.visible = true;
+          reticle.matrix.fromArray(pose.transform.matrix);
+
+          if (!surfaceDetected) {
+            surfaceDetected = true;
+            scanningText.style.display = 'none';
+            if (userPosition) spawnNavigationBalls(userPosition, targetLocation);
+          }
+        } else {
+          reticle.visible = false;
+          if (surfaceDetected) {
+            surfaceDetected = false;
+            scanningText.style.display = 'block';
+          }
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    function animate() {
+      renderer.setAnimationLoop(render);
+    }
+
+    // 🛰️ Ambil posisi GPS pengguna
+    function getUserLocation() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            userPosition = {
+              lat: pos.coords.latitude,
+              lon: pos.coords.longitude
+            };
+            console.log("User location:", userPosition);
+          },
+          err => console.warn("Failed to get location:", err),
+          { enableHighAccuracy: true }
+        );
+      }
+    }
+
+    // 📍 Spawn bola biru ke arah tujuan (dummy)
+    function spawnNavigationBalls(start, end) {
+      const distance = getDistanceFromLatLonInMeters(start.lat, start.lon, end.lat, end.lon);
+      const bearing = getBearing(start.lat, start.lon, end.lat, end.lon);
+
+      const numBalls = Math.floor(distance / 2);
+      for (let i = 1; i <= numBalls; i++) {
+        const ball = new THREE.Mesh(
+          new THREE.SphereGeometry(0.1, 16, 16),
+          new THREE.MeshBasicMaterial({ color: 0x0088ff, transparent: true, opacity: 0.5 })
+        );
+        ball.position.set(0, 0, -i * 2); // sementara dalam arah pandang kamera
+        scene.add(ball);
+      }
+
+      console.log(`Spawned ${numBalls} balls toward bearing ${bearing.toFixed(2)}°`);
+    }
+
+    // 📏 Rumus jarak antar koordinat
+    function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    // 🧭 Rumus arah (bearing)
+    function getBearing(lat1, lon1, lat2, lon2) {
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+      const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180)
+              - Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
   </script>
 </body>
 </html>
