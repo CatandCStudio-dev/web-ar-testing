@@ -2,10 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Hello WebXR Auto Start</title>
+  <title>AR Navigation Prototype</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <style>
     body { margin: 0; overflow: hidden; }
+    #map {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 30vh; /* 1/3 layar */
+      z-index: 10;
+    }
     #scanning-text {
       position: absolute;
       top: 50%;
@@ -15,114 +23,116 @@
       font-size: 24px;
       font-family: Arial, sans-serif;
       text-shadow: 0 0 10px black;
-      background: rgba(0, 0, 0, 0.4);
+      background: rgba(0,0,0,0.4);
       padding: 12px 20px;
       border-radius: 8px;
       display: none;
       animation: pulse 1.5s infinite;
+      z-index: 5;
     }
     @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.5; }
-      100% { opacity: 1; }
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
     }
   </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 </head>
 <body>
-  <div id="overlay" style="
-      position: fixed;
-      inset: 0;
-      background: black;
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
-      font-family: Arial;
-      cursor: pointer;
-  ">
-    👆 Tap to Start AR
-  </div>
-
-  <div id="scanning-text" style="display:none;">🔍 Scanning environment...</div>
+  <div id="scanning-text">🔍 Scanning environment...</div>
+  <div id="map"></div>
 
   <script type="module">
   import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
   let camera, scene, renderer, reticle;
-  let controller;
-  let scanningText = document.getElementById("scanning-text");
-  let overlay = document.getElementById("overlay");
-  let surfaceDetected = false;
   let hitTestSource = null;
   let localSpace = null;
-
-  overlay.addEventListener("click", async () => {
-    overlay.style.display = "none"; // sembunyikan overlay
-    await startAR(); // mulai AR setelah user gesture
-  });
+  let surfaceDetected = false;
+  let scanningText = document.getElementById("scanning-text");
 
   init();
+  animate();
 
-  function init() {
+  async function init() {
+    // Setup renderer
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
     document.body.appendChild(renderer.domElement);
 
     scene = new THREE.Scene();
-
     camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
     scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
 
-    const geometry = new THREE.RingGeometry(0.1, 0.11, 32).rotateX(-Math.PI / 2);
-    const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-    reticle = new THREE.Mesh(geometry, material);
+    // Reticle
+    const ringGeo = new THREE.RingGeometry(0.1, 0.11, 32).rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    reticle = new THREE.Mesh(ringGeo, ringMat);
     reticle.matrixAutoUpdate = false;
     reticle.visible = false;
     scene.add(reticle);
 
-    controller = renderer.xr.getController(0);
-    controller.addEventListener("select", onSelect);
-    scene.add(controller);
+    // Start AR session on user tap
+    const overlay = document.createElement("div");
+    overlay.textContent = "👆 Tap to Start AR Navigation";
+    Object.assign(overlay.style, {
+      position: "fixed", inset: 0, background: "black", color: "white",
+      display: "flex", justifyContent: "center", alignItems: "center",
+      fontSize: "22px", cursor: "pointer", zIndex: 100
+    });
+    document.body.appendChild(overlay);
 
-    window.addEventListener("resize", onWindowResize);
+    overlay.addEventListener("click", async () => {
+      overlay.remove();
+      startAR();
+    });
+
+    // 🗺️ Setup map (Leaflet)
+    const L = await import("https://unpkg.com/leaflet/dist/leaflet-src.esm.js");
+    const map = L.map('map').setView([0, 0], 18);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(map);
+    const userMarker = L.marker([0, 0]).addTo(map);
+
+    // Update GPS
+    navigator.geolocation.watchPosition((pos) => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      map.setView([lat, lon], 18);
+      userMarker.setLatLng([lat, lon]);
+    });
   }
 
   async function startAR() {
     const session = await navigator.xr.requestSession("immersive-ar", {
       requiredFeatures: ["hit-test", "dom-overlay"],
-      domOverlay: { root: document.body },
+      domOverlay: { root: document.body }
     });
-
     renderer.xr.setReferenceSpaceType("local");
     await renderer.xr.setSession(session);
 
-    scanningText.style.display = "block"; // tampilkan teks scanning
-    surfaceDetected = false;
+    scanningText.style.display = 'block';
 
-    const referenceSpace = await session.requestReferenceSpace("local");
+    const refSpace = await session.requestReferenceSpace("local");
     const viewerSpace = await session.requestReferenceSpace("viewer");
     hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
-    localSpace = referenceSpace;
+    localSpace = refSpace;
+
+    // Tambahkan bola arah depan
+    for (let i = 1; i <= 5; i++) {
+      const sphereGeo = new THREE.SphereGeometry(0.05);
+      const sphereMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.5 });
+      const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+      sphere.position.set(0, 0, -i * 0.5); // spawn di depan kamera berturut-turut
+      camera.add(sphere);
+    }
 
     renderer.setAnimationLoop(render);
   }
 
-  function onSelect() {
-    if (reticle.visible) {
-      const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-      const material = new THREE.MeshPhongMaterial({ color: 0x44aa88 });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.setFromMatrixPosition(reticle.matrix);
-      scene.add(mesh);
-    }
-  }
-
-  function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+  function animate() {
+    renderer.setAnimationLoop(render);
   }
 
   function render(timestamp, frame) {
@@ -133,20 +143,18 @@
         const pose = hit.getPose(localSpace);
         reticle.visible = true;
         reticle.matrix.fromArray(pose.transform.matrix);
-
         if (!surfaceDetected) {
           surfaceDetected = true;
-          scanningText.style.display = "none";
+          scanningText.style.display = 'none';
         }
       } else {
         reticle.visible = false;
         if (surfaceDetected) {
           surfaceDetected = false;
-          scanningText.style.display = "block";
+          scanningText.style.display = 'block';
         }
       }
     }
-
     renderer.render(scene, camera);
   }
   </script>
