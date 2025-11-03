@@ -24,117 +24,105 @@
   <button id="enter-ar">Enter AR</button>
 
   <script type="module">
-    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+  import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+  import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
-    let xrSession = null;
-    let xrRefSpace = null;
-    let hitTestSource = null;
+  let camera, scene, renderer, reticle;
+  let controller;
 
-    let renderer, scene, camera;
-    let reticle;
-    const placedObjects = [];
+  init();
+  animate();
 
-    const gltfLoader = new GLTFLoader();
+  function init() {
+    // Renderer setup
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
 
-    const button = document.getElementById('enter-ar');
-    button.addEventListener('click', activateXR);
+    // Scene
+    scene = new THREE.Scene();
 
-    async function activateXR() {
-      if (!navigator.xr) {
-        alert("WebXR not supported on this browser/device.");
-        return;
-      }
+    // Camera
+    camera = new THREE.PerspectiveCamera(
+      70,
+      window.innerWidth / window.innerHeight,
+      0.01,
+      20
+    );
 
-      // Periksa apakah AR mode didukung
-      const supported = await navigator.xr.isSessionSupported('immersive-ar');
-      if (!supported) {
-        alert("AR mode not supported.");
-        return;
-      }
+    // Light
+    const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+    scene.add(light);
 
-      xrSession = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test', 'local']
-      });
+    // Reticle (penanda posisi)
+    const geometry = new THREE.RingGeometry(0.1, 0.11, 32).rotateX(-Math.PI / 2);
+    const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    reticle = new THREE.Mesh(geometry, material);
+    reticle.matrixAutoUpdate = false;
+    reticle.visible = false;
+    scene.add(reticle);
 
-      // Siapkan renderer WebGL agar kompatibel XR
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      renderer.xr.enabled = true;
-      document.body.appendChild(renderer.domElement);
+    // Controller (untuk tap event)
+    controller = renderer.xr.getController(0);
+    controller.addEventListener("select", onSelect);
+    scene.add(controller);
 
-      scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera();
+    // AR Button
+    document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ["hit-test"] }));
 
-      // Reticle (penanda permukaan)
-      const ringGeo = new THREE.RingGeometry(0.05, 0.06, 32).rotateX(-Math.PI / 2);
-      const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
-      reticle = new THREE.Mesh(ringGeo, ringMat);
-      reticle.matrixAutoUpdate = false;
-      reticle.visible = false;
-      scene.add(reticle);
+    window.addEventListener("resize", onWindowResize);
+  }
 
-      // Ambient light
-      scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
-
-      // Inisialisasi referensi XR
-      xrRefSpace = await xrSession.requestReferenceSpace('local');
-      const viewerSpace = await xrSession.requestReferenceSpace('viewer');
-      hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
-
-      renderer.xr.setSession(xrSession);
-      xrSession.requestAnimationFrame(onXRFrame);
-
-      xrSession.addEventListener('select', onSelect);
-
-      // Tombol disembunyikan ketika AR aktif
-      button.style.display = 'none';
+  function onSelect() {
+    if (reticle.visible) {
+      const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+      const material = new THREE.MeshPhongMaterial({ color: 0x44aa88 });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.setFromMatrixPosition(reticle.matrix);
+      scene.add(mesh);
     }
+  }
 
-    function onSelect() {
-      if (reticle.visible) {
-        // Contoh: buat objek kubus kecil di posisi reticle
-        const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-        const material = new THREE.MeshStandardMaterial({ color: 0xff8844 });
-        const cube = new THREE.Mesh(geometry, material);
-        cube.position.setFromMatrixPosition(reticle.matrix);
-        cube.quaternion.setFromRotationMatrix(reticle.matrix);
-        scene.add(cube);
-        placedObjects.push(cube);
+  function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
 
-        // Jika ingin model 3D:
-        /*
-        gltfLoader.load('models/flower.glb', (gltf) => {
-          const model = gltf.scene;
-          model.position.setFromMatrixPosition(reticle.matrix);
-          model.quaternion.setFromRotationMatrix(reticle.matrix);
-          model.scale.set(0.3, 0.3, 0.3);
-          scene.add(model);
-          placedObjects.push(model);
-        });
-        */
+  function animate() {
+    renderer.setAnimationLoop(render);
+  }
+
+  let hitTestSource = null;
+  let localSpace = null;
+
+  async function render(timestamp, frame) {
+    if (frame) {
+      const referenceSpace = renderer.xr.getReferenceSpace();
+      const session = renderer.xr.getSession();
+
+      if (!hitTestSource) {
+        const viewerSpace = await session.requestReferenceSpace("viewer");
+        hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+        localSpace = referenceSpace;
       }
-    }
-
-    function onXRFrame(time, frame) {
-      const session = frame.session;
-      const pose = frame.getViewerPose(xrRefSpace);
-      if (!pose) return;
 
       const hitTestResults = frame.getHitTestResults(hitTestSource);
+
       if (hitTestResults.length > 0) {
         const hit = hitTestResults[0];
-        const hitPose = hit.getPose(xrRefSpace);
+        const pose = hit.getPose(localSpace);
         reticle.visible = true;
-        reticle.matrix.fromArray(hitPose.transform.matrix);
+        reticle.matrix.fromArray(pose.transform.matrix);
       } else {
         reticle.visible = false;
       }
-
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.render(scene, camera);
-
-      session.requestAnimationFrame(onXRFrame);
     }
+
+    renderer.render(scene, camera);
+  }
   </script>
+
 </body>
 </html>
