@@ -17,8 +17,6 @@
       border: none;
       border-radius: 6px;
       font-size: 16px;
-      z-index: 10001;
-      pointer-events: auto;
     }
     #scanning-text {
       position: absolute;
@@ -34,8 +32,6 @@
       border-radius: 8px;
       display: none; /* 🔸 awalnya disembunyikan */
       animation: pulse 1.5s infinite;
-      z-index: 10002; /* pastikan di atas canvas */
-      pointer-events: none; /* biarkan klik jatuh ke tombol AR jika perlu */
     }
     @keyframes pulse {
       0% { opacity: 1; }
@@ -84,32 +80,18 @@
     controller.addEventListener("select", onSelect);
     scene.add(controller);
 
-    // Tambahkan AR Button dengan callback untuk mengetahui kapan mode AR aktif
+    // 🔸 Tambahkan AR Button dengan callback untuk mengetahui kapan mode AR aktif
     const arButton = ARButton.createButton(renderer, { requiredFeatures: ["hit-test"] });
     document.body.appendChild(arButton);
 
-    // tampilkan overlay scanning segera saat user menekan tombol AR (sementara menunggu sessionstart)
-    arButton.addEventListener('click', () => {
-      if (scanningText) scanningText.style.display = 'block';
-      console.log('AR button clicked - showing scanning overlay');
-    });
-
-    // pastikan renderer canvas di belakang overlay
-    renderer.domElement.style.position = 'absolute';
-    renderer.domElement.style.top = '0';
-    renderer.domElement.style.left = '0';
-    renderer.domElement.style.zIndex = '0';
-
     // Ketika user masuk ke mode AR
     renderer.xr.addEventListener('sessionstart', () => {
-      console.log('sessionstart fired');
       scanningText.style.display = 'block'; // tampilkan teks saat AR dimulai
       surfaceDetected = false;
     });
 
     // Ketika user keluar dari mode AR
     renderer.xr.addEventListener('sessionend', () => {
-      console.log('sessionend fired');
       scanningText.style.display = 'none'; // sembunyikan teks
       reticle.visible = false;
       surfaceDetected = false;
