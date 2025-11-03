@@ -1,159 +1,146 @@
 <!doctype html>
-<html>
+<html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport"
-        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
-    <title>Hello WebXR with Hit Test</title>
-
-    <script src="https://unpkg.com/three@0.126.0/build/three.js"></script>
-    <script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebXR AR Reticle + Hit Test</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; }
+    #info { position: absolute; left: 10px; top: 10px; z-index: 1; background: rgba(0,0,0,0.4); color: white; padding: 8px 10px; border-radius: 6px; }
+    canvas { display:block }
+  </style>
 </head>
 <body>
+  <div id="info">Tapping screen places an object on the reticle (ring). Use on a WebXR-capable device.</div>
 
-<button onclick="activateXR()">Start Hello WebXR</button>
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.158.0/build/three.module.js';
+    import { ARButton } from 'https://unpkg.com/three@0.158.0/examples/jsm/webxr/ARButton.js';
 
-<script>
-// Variabel Global
-let session = null;
-let referenceSpace = null;
-let xrHitTestSource = null;
-let reticle = null; // Objek Three.js untuk reticle
-let cube = null;    // Objek Three.js untuk kubus (objek yang akan ditempatkan)
+    let camera, scene, renderer;
+    let reticle;
+    let hitTestSource = null;
+    let hitTestSourceRequested = false;
+    let localReferenceSpace = null;
 
-async function activateXR() {
-    if (!navigator.xr) {
-        alert('WebXR not supported on this device/browser.');
-        return;
+    init();
+
+    function init() {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+
+      scene = new THREE.Scene();
+
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+      // Light
+      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+      scene.add(light);
+
+      // Renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      container.appendChild(renderer.domElement);
+
+      // AR Button (request hit-test feature)
+      document.body.appendChild(ARButton.createButton(renderer, {
+        requiredFeatures: ['hit-test']
+      }));
+
+      // Reticle (ring)
+      const geometry = new THREE.RingGeometry(0.06, 0.09, 32);
+      const material = new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
+      reticle = new THREE.Mesh(geometry, material);
+      reticle.rotation.x = - Math.PI / 2; // align flat on horizontal surface
+      reticle.visible = false;
+      scene.add(reticle);
+
+      // A simple object to place (prototype) - we'll clone this each time
+      const boxGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+      const boxMat = new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0.1 });
+      window.protoPlacedObject = new THREE.Mesh(boxGeo, boxMat);
+
+      // Handle taps
+      renderer.domElement.addEventListener('touchstart', onSelect, true);
+      renderer.domElement.addEventListener('click', onSelect, true);
+
+      window.addEventListener('resize', onWindowResize);
+
+      // Animation loop
+      renderer.setAnimationLoop(render);
     }
 
-    // Buat canvas + context WebGL XR-compatible terlebih dahulu
-    const canvas = document.createElement('canvas');
-    document.body.appendChild(canvas);
-    const gl = canvas.getContext('webgl', { xrCompatible: true });
-    await gl.makeXRCompatible();
-
-    // Buat scene
-    const scene = new THREE.Scene();
-    
-    // Tambahkan pencahayaan agar objek terlihat
-    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-
-    // Buat objek kubus (disembunyikan dulu)
-    const materials = [
-        new THREE.MeshBasicMaterial({color: 0xff0000}),
-        new THREE.MeshBasicMaterial({color: 0x0000ff}),
-        new THREE.MeshBasicMaterial({color: 0x00ff00}),
-        new THREE.MeshBasicMaterial({color: 0xff00ff}),
-        new THREE.MeshBasicMaterial({color: 0x00ffff}),
-        new THREE.MeshBasicMaterial({color: 0xffff00})
-    ];
-    cube = new THREE.Mesh(new THREE.BoxBufferGeometry(0.2, 0.2, 0.2), materials);
-    cube.visible = false; // Sembunyikan kubus sampai ditempatkan
-    scene.add(cube);
-    
-    // **Buat Reticle Sederhana (Cincin)**
-    const geometry = new THREE.RingGeometry(0.1, 0.12, 32).rotateX(-Math.PI / 2); // Rotasi agar rata dengan lantai
-    const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    reticle = new THREE.Mesh(geometry, material);
-    reticle.visible = false; // Sembunyikan reticle sampai permukaan terdeteksi
-    scene.add(reticle);
-
-
-    // Buat renderer menggunakan canvas + gl yang sudah dibuat
-    const renderer = new THREE.WebGLRenderer({
-        alpha: true,
-        preserveDrawingBuffer: true,
-        canvas: canvas,
-        context: gl
-    });
-    renderer.autoClear = false;
-
-    // --- Langkah 1: Minta fitur 'hit-test' ---
-    session = await navigator.xr.requestSession('immersive-ar', { 
-        requiredFeatures: ['local', 'hit-test'] 
-    });
-
-    // Pasang XRWebGLLayer ke session
-    session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
-
-    // Minta reference space sebelum memulai loop frame
-    referenceSpace = await session.requestReferenceSpace('local');
-
-    // Camera (matriks dikontrol langsung oleh WebXR)
-    const camera = new THREE.PerspectiveCamera();
-    camera.matrixAutoUpdate = false;
-    
-    // Tambahkan event listener untuk menempatkan objek saat layar disentuh (select)
-    session.addEventListener('select', onSelect);
-    
-    // --- Langkah 2 & 3: Buat XRHitTestSource ---
-    // Gunakan 'viewer' space sebagai sumber ray
-    const viewerSpace = await session.requestReferenceSpace('viewer');
-    xrHitTestSource = await session.requestHitTestSource({ space: viewerSpace });
-    
-    // --- Langkah 4: Render loop dan Hit Test ---
-    function onXRFrame(time, frame) {
-        session.requestAnimationFrame(onXRFrame);
-
-        // Bind framebuffer yang disediakan WebXR
-        gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
-
-        const pose = frame.getViewerPose(referenceSpace);
-        
-        // ⬇️ Lakukan Hit Test ⬇️
-        if (xrHitTestSource) {
-            const hitTestResults = frame.getHitTestResults(xrHitTestSource);
-
-            if (hitTestResults.length > 0) {
-                const hit = hitTestResults[0];
-                const pose = hit.getPose(referenceSpace);
-                
-                // Posisikan reticle ke lokasi hit test
-                reticle.matrix.fromArray(pose.transform.matrix);
-                reticle.visible = true; // Tampilkan reticle
-            } else {
-                reticle.visible = false; // Sembunyikan jika tidak ada permukaan terdeteksi
-            }
-        }
-        
-        if (pose) {
-            // ... (setup viewport) ...
-            const view = pose.views[0];
-            const viewport = session.renderState.baseLayer.getViewport(view);
-            renderer.setSize(viewport.width, viewport.height, false);
-
-            // Masukkan matriks dari WebXR ke camera three.js
-            camera.matrix.fromArray(view.transform.matrix);
-            camera.projectionMatrix.fromArray(view.projectionMatrix);
-            camera.updateMatrixWorld(true);
-
-            // Render scene
-            renderer.clearDepth();
-            renderer.render(scene, camera);
-        }
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
     }
-    
-    // Fungsi untuk menempatkan objek saat pengguna menekan layar
-    function onSelect() {
-        if (reticle.visible) {
-            // Kloning posisi reticle ke kubus
-            cube.position.setFromMatrixPosition(reticle.matrix);
-            cube.visible = true;
-        }
+
+    function onSelect(event) {
+      // Only place when reticle is visible
+      if (!reticle.visible) return;
+
+      const placed = window.protoPlacedObject.clone();
+      // copy position & orientation from reticle
+      placed.position.setFromMatrixPosition(reticle.matrix);
+      placed.quaternion.setFromRotationMatrix(reticle.matrix);
+      // lift slightly so it sits nicely on top
+      placed.position.y += 0.04;
+      scene.add(placed);
     }
-    
-    // Mulai loop render
-    session.requestAnimationFrame(onXRFrame);
-    
-    // Tambahkan pembersihan saat sesi berakhir
-    session.addEventListener('end', () => {
-        if (xrHitTestSource) {
-            xrHitTestSource.cancel();
-            xrHitTestSource = null;
+
+    // Render loop: do hit-test each frame
+    function render(timestamp, frame) {
+      if (frame) {
+        const session = renderer.xr.getSession();
+
+        if (!localReferenceSpace) {
+          // Create a local reference space for placing objects
+          session.requestReferenceSpace('local').then((refSpace) => {
+            localReferenceSpace = refSpace;
+          }).catch((err) => {
+            console.warn('requestReferenceSpace(local) failed:', err);
+          });
         }
-    });
-}
-</script>
+
+        if (!hitTestSourceRequested) {
+          const viewerSpacePromise = session.requestReferenceSpace('viewer');
+          viewerSpacePromise.then((viewerSpace) => {
+            session.requestHitTestSource({ space: viewerSpace }).then((source) => {
+              hitTestSource = source;
+            });
+          });
+
+          session.addEventListener('end', () => {
+            hitTestSourceRequested = false;
+            hitTestSource = null;
+            localReferenceSpace = null;
+          });
+
+          hitTestSourceRequested = true;
+        }
+
+        if (hitTestSource && localReferenceSpace) {
+          const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+          if (hitTestResults.length > 0) {
+            const hit = hitTestResults[0];
+            const pose = hit.getPose(localReferenceSpace);
+
+            // Apply the hit pose to the reticle
+            reticle.visible = true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+            reticle.matrix.decompose(reticle.position, reticle.quaternion, reticle.scale);
+          } else {
+            reticle.visible = false;
+          }
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+  </script>
 </body>
 </html>
