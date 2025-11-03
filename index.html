@@ -18,10 +18,31 @@
       border-radius: 6px;
       font-size: 16px;
     }
+    #scanning-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 24px;
+      font-family: Arial, sans-serif;
+      text-shadow: 0 0 10px black;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 12px 20px;
+      border-radius: 8px;
+      display: none; /* 🔸 awalnya disembunyikan */
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
   </style>
 </head>
 <body>
   <button id="enter-ar">Enter AR</button>
+  <div id="scanning-text">🔍 Scanning environment...</div>
 
   <script type="module">
   import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
@@ -29,49 +50,25 @@
 
   let camera, scene, renderer, reticle;
   let controller;
-  let scanningText;
-let surfaceDetected = false;
-
+  let scanningText = document.getElementById("scanning-text");
+  let surfaceDetected = false;
 
   init();
   animate();
 
   function init() {
-    // Renderer setup
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
     document.body.appendChild(renderer.domElement);
 
-    // Scene
     scene = new THREE.Scene();
 
-    // Tambahkan indikator scanning
-    scanningText = document.createElement('div');
-    scanningText.innerText = "🔍 Scanning environment...";
-    scanningText.style.position = 'absolute';
-    scanningText.style.top = '50%';
-    scanningText.style.left = '50%';
-    scanningText.style.transform = 'translate(-50%, -50%)';
-    scanningText.style.color = 'white';
-    scanningText.style.fontSize = '24px';
-    scanningText.style.fontFamily = 'Arial, sans-serif';
-    scanningText.style.textShadow = '0 0 10px black';
-    document.body.appendChild(scanningText);
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-    // Camera
-    camera = new THREE.PerspectiveCamera(
-      70,
-      window.innerWidth / window.innerHeight,
-      0.01,
-      20
-    );
-
-    // Light
     const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
     scene.add(light);
 
-    // Reticle (penanda posisi)
     const geometry = new THREE.RingGeometry(0.1, 0.11, 32).rotateX(-Math.PI / 2);
     const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
     reticle = new THREE.Mesh(geometry, material);
@@ -79,13 +76,26 @@ let surfaceDetected = false;
     reticle.visible = false;
     scene.add(reticle);
 
-    // Controller (untuk tap event)
     controller = renderer.xr.getController(0);
     controller.addEventListener("select", onSelect);
     scene.add(controller);
 
-    // AR Button
-    document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ["hit-test"] }));
+    // 🔸 Tambahkan AR Button dengan callback untuk mengetahui kapan mode AR aktif
+    const arButton = ARButton.createButton(renderer, { requiredFeatures: ["hit-test"] });
+    document.body.appendChild(arButton);
+
+    // Ketika user masuk ke mode AR
+    renderer.xr.addEventListener('sessionstart', () => {
+      scanningText.style.display = 'block'; // tampilkan teks saat AR dimulai
+      surfaceDetected = false;
+    });
+
+    // Ketika user keluar dari mode AR
+    renderer.xr.addEventListener('sessionend', () => {
+      scanningText.style.display = 'none'; // sembunyikan teks
+      reticle.visible = false;
+      surfaceDetected = false;
+    });
 
     window.addEventListener("resize", onWindowResize);
   }
@@ -132,18 +142,18 @@ let surfaceDetected = false;
         reticle.visible = true;
         reticle.matrix.fromArray(pose.transform.matrix);
 
-        // Jika baru pertama kali mendeteksi permukaan
+        // Sembunyikan teks scanning saat permukaan sudah terdeteksi
         if (!surfaceDetected) {
           surfaceDetected = true;
-          scanningText.style.display = 'none'; // sembunyikan teks
+          scanningText.style.display = 'none';
         }
       } else {
         reticle.visible = false;
 
-        // Jika kehilangan permukaan
+        // Tampilkan teks kembali jika kehilangan tracking
         if (surfaceDetected) {
           surfaceDetected = false;
-          scanningText.style.display = 'block'; // tampilkan lagi teks
+          scanningText.style.display = 'block';
         }
       }
     }
@@ -151,6 +161,5 @@ let surfaceDetected = false;
     renderer.render(scene, camera);
   }
   </script>
-
 </body>
 </html>
