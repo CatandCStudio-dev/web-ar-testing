@@ -29,6 +29,9 @@
 
   let camera, scene, renderer, reticle;
   let controller;
+  let scanningText;
+let surfaceDetected = false;
+
 
   init();
   animate();
@@ -42,6 +45,19 @@
 
     // Scene
     scene = new THREE.Scene();
+
+    // Tambahkan indikator scanning
+    scanningText = document.createElement('div');
+    scanningText.innerText = "🔍 Scanning environment...";
+    scanningText.style.position = 'absolute';
+    scanningText.style.top = '50%';
+    scanningText.style.left = '50%';
+    scanningText.style.transform = 'translate(-50%, -50%)';
+    scanningText.style.color = 'white';
+    scanningText.style.fontSize = '24px';
+    scanningText.style.fontFamily = 'Arial, sans-serif';
+    scanningText.style.textShadow = '0 0 10px black';
+    document.body.appendChild(scanningText);
 
     // Camera
     camera = new THREE.PerspectiveCamera(
@@ -115,8 +131,20 @@
         const pose = hit.getPose(localSpace);
         reticle.visible = true;
         reticle.matrix.fromArray(pose.transform.matrix);
+
+        // Jika baru pertama kali mendeteksi permukaan
+        if (!surfaceDetected) {
+          surfaceDetected = true;
+          scanningText.style.display = 'none'; // sembunyikan teks
+        }
       } else {
         reticle.visible = false;
+
+        // Jika kehilangan permukaan
+        if (surfaceDetected) {
+          surfaceDetected = false;
+          scanningText.style.display = 'block'; // tampilkan lagi teks
+        }
       }
     }
 
