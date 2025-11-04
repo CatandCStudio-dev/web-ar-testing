@@ -4,57 +4,60 @@
   <meta charset="utf-8">
   <title>AR Kompas & Bola Arah</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <style>
-    body { margin: 0; overflow: hidden; background: black; }
+ <style>
+  body { margin: 0; overflow: hidden; background: black; }
 
-    #scanning-text {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: white;
-      font-size: 24px;
-      font-family: Arial, sans-serif;
-      text-shadow: 0 0 10px black;
-      background: rgba(0,0,0,0.4);
-      padding: 12px 20px;
-      border-radius: 8px;
-      display: none;
-      animation: pulse 1.5s infinite;
-      z-index: 5;
-    }
+  #scanning-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 24px;
+    font-family: Arial, sans-serif;
+    text-shadow: 0 0 10px black;
+    background: rgba(0,0,0,0.4);
+    padding: 12px 20px;
+    border-radius: 8px;
+    display: none;
+    animation: pulse 1.5s infinite;
+    z-index: 5;
+  }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
-    }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
 
-    #compass-arrow {
-      position: fixed;
-      top: 15px;
-      left: 50%;
-      transform: translateX(-50%) rotate(0deg);
-      width: 60px;
-      height: 60px;
-      background: url('https://github.com/CatandCStudio-dev/web-ar-testing/raw/refs/heads/test-ar-js/Assets/arrow.glb') no-repeat center;
-      background-size: contain;
-      z-index: 999;
-      opacity: 0.9;
-      pointer-events: none;
-      filter: drop-shadow(0 0 3px black);
-    }
+  /* 🔺 Kompas Arrow Buatan Sendiri (tanpa gambar) */
+  #compass-arrow {
+    position: fixed;
+    top: 15px;
+    left: 50%;
+    transform: translateX(-50%) rotate(0deg);
+    width: 0;
+    height: 0;
+    border-left: 25px solid transparent;
+    border-right: 25px solid transparent;
+    border-bottom: 40px solid red; /* warna panah */
+    filter: drop-shadow(0 0 3px black);
+    z-index: 999;
+    opacity: 0.9;
+    pointer-events: none;
+  }
 
-    #heading-text {
-      position: fixed;
-      top: 85px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 18px;
-      color: white;
-      text-shadow: 0 0 5px black;
-      z-index: 999;
-    }
-  </style>
+  #heading-text {
+    position: fixed;
+    top: 75px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 18px;
+    color: white;
+    text-shadow: 0 0 5px black;
+    z-index: 999;
+  }
+</style>
+
 </head>
 <body>
   <div id="scanning-text">🔍 Scanning environment...</div>
