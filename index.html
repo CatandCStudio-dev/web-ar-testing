@@ -40,6 +40,18 @@
 <body>
   <div id="scanning-text">🔍 Scanning environment...</div>
   <div id="map"></div>
+  <div id="compass-arrow" style="
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) rotate(0deg);
+    width: 50px;
+    height: 50px;
+    background: url('https://upload.wikimedia.org/wikipedia/commons/3/3c/Red_triangle.svg') no-repeat center;
+    background-size: contain;
+    z-index: 20;
+    opacity: 0.8;
+  "></div>
 
   <script type="module">
   import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
@@ -105,12 +117,12 @@
       }
     });
 
-    // Update GPS
-    navigator.geolocation.watchPosition((pos) => {
-      userLat = pos.coords.latitude;
-      userLon = pos.coords.longitude;
-      map.setView([userLat, userLon], 18);
-      userMarker.setLatLng([userLat, userLon]);
+    const compassArrow = document.getElementById("compass-arrow");
+    window.addEventListener("deviceorientationabsolute", (event) => {
+      if (event.absolute && event.alpha != null) {
+        userHeading = 360 - event.alpha;
+        compassArrow.style.transform = `translateX(-50%) rotate(${userHeading}deg)`;
+      }
     });
   }
 
@@ -135,52 +147,39 @@
     renderer.setAnimationLoop(render);
   }
 
-  function addNavigationSpheres() {
-    navigationSpheres.forEach(b => scene.remove(b));
-    navigationSpheres = [];
-
-    const R = 6371000; // jari-jari bumi (meter)
-    const dLat = (targetLat - userLat) * Math.PI / 180;
-    const dLon = (targetLon - userLon) * Math.PI / 180;
-    const planeOffset = -0.05; // sedikit di bawah supaya tampak menempel
-    const nearOffset = 0.5;    // posisi awal dekat dengan pengguna
-
-    // jarak total ke target
-    const distTotal = Math.sqrt(
-      (R * dLat) ** 2 + (R * dLon * Math.cos((userLat + targetLat) * Math.PI / 360)) ** 2
-    );
-
-    // bearing (arah dari utara)
-    const y = Math.sin(dLon) * Math.cos(targetLat * Math.PI / 180);
-    const x = Math.cos(userLat * Math.PI / 180) * Math.sin(targetLat * Math.PI / 180) -
-              Math.sin(userLat * Math.PI / 180) * Math.cos(targetLat * Math.PI / 180) * Math.cos(dLon);
-    const bearing = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-
-    // arah relatif terhadap pandangan pengguna
-    const relativeAngle = (bearing - userHeading) * Math.PI / 180;
-
-    // ⚙️ Atur interval antar bola (misal tiap 5 meter)
-    const step = 5;
-    const numSpheres = Math.min(Math.ceil(distTotal / step), 20); // batas agar tidak kebanyakan
+  function addNavigationSpheres(originPose) {
+    // hanya buat 4–5 bola ke depan pengguna
+    const numSpheres = 5;
+    const stepDistance = 1.5; // jarak antar bola (meter)
 
     for (let i = 1; i <= numSpheres; i++) {
-      const distance = i * step; // posisi bola ke-i (meter)
-      const xPos = Math.sin(relativeAngle) * distance;
-      const zPos = -Math.cos(relativeAngle) * distance;
+      const distance = i * stepDistance;
+      const angle = THREE.MathUtils.degToRad(userHeading); // arah kompas dari perangkat
+
+      // Posisi relatif terhadap kamera
+      const xPos = Math.sin(angle) * distance;
+      const zPos = -Math.cos(angle) * distance;
 
       const sphereGeo = new THREE.SphereGeometry(0.15, 16, 16);
       const sphereMat = new THREE.MeshBasicMaterial({
         color: 0x00aaff,
         transparent: true,
-        opacity: 0.8
+        opacity: 0.9
       });
       const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-      sphere.position.set(xPos * 0.8 + 0, planeOffset, zPos * 0.8 - nearOffset);
+
+      // letakkan di atas plane terdeteksi
+      if (originPose) {
+        const planeY = originPose.transform.position.y;
+        sphere.position.set(xPos, planeY + 0.05, zPos);
+      } else {
+        sphere.position.set(xPos, 0, zPos);
+      }
+
       scene.add(sphere);
       navigationSpheres.push(sphere);
     }
   }
-
 
 
   function render(timestamp, frame) {
@@ -204,9 +203,23 @@
       }
     }
 
-    if (userLat && userLon && navigationSpheres.length === 0) {
-      addNavigationSpheres();
+    if (surfaceDetected && navigationSpheres.length === 0 && reticle.visible) {
+      const pose = frame.getHitTestResults(hitTestSource)[0]?.getPose(localSpace);
+      if (pose) addNavigationSpheres(pose);
     }
+
+    // Jika pengguna bergerak maju, tambahkan bola baru di depan
+    const cameraPosition = renderer.xr.getCamera(camera).position;
+    if (navigationSpheres.length > 0) {
+      const lastSphere = navigationSpheres[navigationSpheres.length - 1];
+      const dist = cameraPosition.distanceTo(lastSphere.position);
+      if (dist < 2 && navigationSpheres.length < 30) {
+        const pose = frame?.getHitTestResults(hitTestSource)[0]?.getPose(localSpace);
+        if (pose) addNavigationSpheres(pose);
+      }
+    }
+
+
 
 
     renderer.render(scene, camera);
