@@ -112,14 +112,80 @@
     const userMarker = L.marker([0, 0]).addTo(map);
 
     const compassArrow = document.getElementById("compass-arrow");
-    if (window.DeviceOrientationEvent) {
-      window.addEventListener("deviceorientation", (event) => {
-        if (event.alpha != null) {
-          userHeading = 360 - event.alpha;
-          compassArrow.style.transform = `translateX(-50%) rotate(${userHeading}deg)`;
+
+    // smoothing untuk kompas (opsional)
+    let smoothedHeading = null;
+    const smoothingFactor = 0.12;
+
+    async function enableCompassListeners() {
+      function handleOrientationEvent(event) {
+        // prefer absolute jika tersedia
+        const alpha = (event.absolute && event.alpha != null) ? event.alpha : event.alpha;
+        if (alpha == null) return;
+
+        // convert ke heading (derajat dari utara searah jarum jam)
+        const raw = 360 - alpha;
+
+        // smoothing simpel (hindari loncatan 0/360)
+        if (smoothedHeading === null) {
+          smoothedHeading = raw;
+        } else {
+          let diff = raw - smoothedHeading;
+          if (diff > 180) diff -= 360;
+          if (diff < -180) diff += 360;
+          smoothedHeading += diff * smoothingFactor;
+        }
+
+        // normalisasi
+        smoothedHeading = (smoothedHeading + 360) % 360;
+        userHeading = smoothedHeading;
+
+        // apply ke arrow UI
+        compassArrow.style.transform = `translateX(-50%) rotate(${userHeading}deg)`;
+      }
+
+      // prefer event 'deviceorientationabsolute' jika ada
+      window.addEventListener('deviceorientationabsolute', handleOrientationEvent, true);
+      // fallback
+      window.addEventListener('deviceorientation', handleOrientationEvent, true);
+    }
+
+    // iOS Safari membutuhkan permission
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      // buat tombol izin kecil supaya user memberi izin kompas
+      const permBtn = document.createElement('button');
+      permBtn.textContent = 'Izinkan Kompas';
+      Object.assign(permBtn.style, {
+        position: 'fixed', bottom: '10px', left: '50%',
+        transform: 'translateX(-50%)', zIndex: 2000, padding: '8px 12px'
+      });
+      document.body.appendChild(permBtn);
+      permBtn.addEventListener('click', async () => {
+        try {
+          const resp = await DeviceOrientationEvent.requestPermission();
+          permBtn.remove();
+          if (resp === 'granted') {
+            enableCompassListeners();
+          } else {
+            console.warn('Izin kompas ditolak');
+          }
+        } catch (e) {
+          // fallback: tetap coba pasang listener
+          console.warn('requestPermission error, pakai fallback', e);
+          permBtn.remove();
+          enableCompassListeners();
         }
       });
+    } else {
+      // Android / browser lain: langsung aktifkan listener
+      enableCompassListeners();
     }
+
+    window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
 
   }
 
@@ -203,7 +269,7 @@
     }
 
     // Jika pengguna bergerak maju, tambahkan bola baru di depan
-    const cameraPosition = renderer.xr.getCamera(camera).position;
+    const cameraPosition = renderer.xr.getCamera().position;
     if (navigationSpheres.length > 0) {
       const lastSphere = navigationSpheres[navigationSpheres.length - 1];
       const dist = cameraPosition.distanceTo(lastSphere.position);
