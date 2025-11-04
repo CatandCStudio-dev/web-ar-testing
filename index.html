@@ -73,6 +73,10 @@
   let surfaceDetected = false;
   let scanningText = document.getElementById("scanning-text");
   let navigationSpheres = [];
+  // hysteresis untuk mencegah bola hilang karena fluktuasi heading singkat
+  let lostHeadingFrames = 0;
+  const LOST_FRAMES_THRESHOLD = 30; // jumlah frame sebelum dianggap "hilang" (sesuaikan)
+  const HYSTERESIS_ANGLE = 5; // tambahan sudut agar lebih toleran ketika menghapus
 
   // 🎯 Target arah (Utara)
   const TARGET_HEADING = 0;      // derajat utara
@@ -261,24 +265,39 @@
       }
     }
 
-    // 🧭 Spawn bola hanya jika arah sesuai target
+    // 🧭 Spawn bola: pastikan ada hit pose sebelum spawn
     const angDiff = shortestAngleDiff(userHeading, TARGET_HEADING);
     if (surfaceDetected && !sphereSpawned && reticle.visible && angDiff <= ANGLE_THRESHOLD) {
-      const pose = frame.getHitTestResults(hitTestSource)[0]?.getPose(localSpace);
+      // ambil pose dengan aman
+      let pose = null;
+      if (frame && hitTestSource) {
+        const results = frame.getHitTestResults(hitTestSource);
+        if (results.length > 0) pose = results[0].getPose(localSpace);
+      }
       if (pose) {
         addNavigationSpheres(pose);
         sphereSpawned = true;
+        lostHeadingFrames = 0;
         console.log("🎯 Bola biru di-spawn karena arah sesuai target!");
       }
     }
 
-    // ❌ Hapus bola jika arah berubah jauh dari target
-    const diff = Math.abs(userHeading - TARGET_HEADING);
-    if ((diff > ANGLE_THRESHOLD && diff < 360 - ANGLE_THRESHOLD) && sphereSpawned) {
-      navigationSpheres.forEach(s => scene.remove(s));
-      navigationSpheres = [];
-      sphereSpawned = false;
-      console.log("❌ Arah berubah, bola dihapus");
+    // Hapus bola dengan hysteresis: hanya hapus jika angDiff > (threshold + HYSTERESIS_ANGLE)
+    // dan terjadi terus menerus selama LOST_FRAMES_THRESHOLD frame
+    if (sphereSpawned) {
+      if (angDiff > (ANGLE_THRESHOLD + HYSTERESIS_ANGLE)) {
+        lostHeadingFrames++;
+      } else {
+        lostHeadingFrames = 0;
+      }
+
+      if (lostHeadingFrames >= LOST_FRAMES_THRESHOLD) {
+        navigationSpheres.forEach(s => scene.remove(s));
+        navigationSpheres = [];
+        sphereSpawned = false;
+        lostHeadingFrames = 0;
+        console.log("❌ Arah berubah konsisten, bola dihapus");
+      }
     }
 
     renderer.render(scene, camera);
