@@ -142,6 +142,8 @@
     const R = 6371000; // jari-jari bumi (meter)
     const dLat = (targetLat - userLat) * Math.PI / 180;
     const dLon = (targetLon - userLon) * Math.PI / 180;
+    const planeOffset = -0.05; // sedikit di bawah supaya tampak menempel
+    const nearOffset = 0.5;    // posisi awal dekat dengan pengguna
 
     // jarak total ke target
     const distTotal = Math.sqrt(
@@ -173,7 +175,7 @@
         opacity: 0.8
       });
       const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-      sphere.position.set(xPos, 0, zPos);
+      sphere.position.set(xPos * 0.8 + 0, planeOffset, zPos * 0.8 - nearOffset);
       scene.add(sphere);
       navigationSpheres.push(sphere);
     }
@@ -202,9 +204,10 @@
       }
     }
 
-    if (userLat && userLon) {
+    if (userLat && userLon && navigationSpheres.length === 0) {
       addNavigationSpheres();
     }
+
 
     renderer.render(scene, camera);
   }
