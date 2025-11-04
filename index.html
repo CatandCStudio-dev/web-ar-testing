@@ -50,6 +50,10 @@
   let surfaceDetected = false;
   let scanningText = document.getElementById("scanning-text");
   let navigationSpheres = [];
+  let userLat = 0, userLon = 0;       // lokasi pengguna
+  let targetLat = -7.542726627474412, targetLon = 110.77000583632322; // lokasi tujuan (contoh)
+  let userHeading = 0;                // arah pandang pengguna (kompas)
+
 
   init();
 
@@ -94,12 +98,19 @@
     }).addTo(map);
     const userMarker = L.marker([0, 0]).addTo(map);
 
+    // 🔄 Dapatkan arah pandang pengguna (kompas)
+    window.addEventListener("deviceorientationabsolute", (event) => {
+      if (event.absolute && event.alpha != null) {
+        userHeading = 360 - event.alpha; // derajat dari utara searah jarum jam
+      }
+    });
+
     // Update GPS
     navigator.geolocation.watchPosition((pos) => {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-      map.setView([lat, lon], 18);
-      userMarker.setLatLng([lat, lon]);
+      userLat = pos.coords.latitude;
+      userLon = pos.coords.longitude;
+      map.setView([userLat, userLon], 18);
+      userMarker.setLatLng([userLat, userLon]);
     });
   }
 
@@ -125,28 +136,40 @@
   }
 
   function addNavigationSpheres() {
-    // Hapus bola lama (kalau ada)
     navigationSpheres.forEach(b => scene.remove(b));
     navigationSpheres = [];
 
-    // Tambahkan 5 bola biru ke arah depan (dummy tujuan)
-    for (let i = 1; i <= 5; i++) {
-      const sphereGeo = new THREE.SphereGeometry(0.1, 16, 16);
-      const sphereMat = new THREE.MeshBasicMaterial({
-        color: 0x00aaff,
-        transparent: true,
-        opacity: 0.6
-      });
-      const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+    const R = 6371000; // jari-jari bumi (meter)
+    const dLat = (targetLat - userLat) * Math.PI / 180;
+    const dLon = (targetLon - userLon) * Math.PI / 180;
 
-      // 🔸 Posisi dummy: 0.5 meter di depan pengguna per bola
-      sphere.position.set(0, 0, -i * 0.5);
-      sphere.userData = { distance: i * 0.5 };
+    // jarak ke target
+    const dist = Math.sqrt(
+      (R * dLat) ** 2 + (R * dLon * Math.cos((userLat + targetLat) * Math.PI / 360)) ** 2
+    );
 
-      scene.add(sphere);
-      navigationSpheres.push(sphere);
-    }
+    // bearing (arah dari utara)
+    const y = Math.sin(dLon) * Math.cos(targetLat * Math.PI / 180);
+    const x = Math.cos(userLat * Math.PI / 180) * Math.sin(targetLat * Math.PI / 180) -
+              Math.sin(userLat * Math.PI / 180) * Math.cos(targetLat * Math.PI / 180) * Math.cos(dLon);
+    const bearing = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+
+    // arah relatif terhadap pandangan pengguna
+    const relativeAngle = (bearing - userHeading) * Math.PI / 180;
+
+    // 🔹 Posisi bola di dunia AR
+    const xPos = Math.sin(relativeAngle) * dist;
+    const zPos = -Math.cos(relativeAngle) * dist;
+
+    const sphereGeo = new THREE.SphereGeometry(0.2, 16, 16);
+    const sphereMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.7 });
+    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+    sphere.position.set(xPos, 0, zPos);
+
+    scene.add(sphere);
+    navigationSpheres.push(sphere);
   }
+
 
   function render(timestamp, frame) {
     if (frame && hitTestSource) {
@@ -167,6 +190,10 @@
           scanningText.style.display = 'block';
         }
       }
+    }
+
+    if (userLat && userLon) {
+      addNavigationSpheres();
     }
 
     renderer.render(scene, camera);
