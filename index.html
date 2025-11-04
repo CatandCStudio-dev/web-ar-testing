@@ -235,6 +235,11 @@
     }
   }
 
+  function shortestAngleDiff(a, b) {
+  // kembalikan selisih sudut terkecil (0..180)
+  return Math.abs(((a - b + 540) % 360) - 180);
+}
+
   function render(timestamp, frame) {
     if (frame && hitTestSource) {
       const hitTestResults = frame.getHitTestResults(hitTestSource);
@@ -257,15 +262,13 @@
     }
 
     // 🧭 Spawn bola hanya jika arah sesuai target
-    if (surfaceDetected && !sphereSpawned && reticle.visible) {
-      const diff = Math.abs(userHeading - TARGET_HEADING);
-      if (diff < ANGLE_THRESHOLD || diff > 360 - ANGLE_THRESHOLD) {
-        const pose = frame.getHitTestResults(hitTestSource)[0]?.getPose(localSpace);
-        if (pose) {
-          addNavigationSpheres(pose);
-          sphereSpawned = true;
-          console.log("🎯 Bola biru di-spawn karena arah sesuai target!");
-        }
+    const angDiff = shortestAngleDiff(userHeading, TARGET_HEADING);
+    if (surfaceDetected && !sphereSpawned && reticle.visible && angDiff <= ANGLE_THRESHOLD) {
+      const pose = frame.getHitTestResults(hitTestSource)[0]?.getPose(localSpace);
+      if (pose) {
+        addNavigationSpheres(pose);
+        sphereSpawned = true;
+        console.log("🎯 Bola biru di-spawn karena arah sesuai target!");
       }
     }
 
