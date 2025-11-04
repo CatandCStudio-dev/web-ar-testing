@@ -76,11 +76,11 @@
   // hysteresis untuk mencegah bola hilang karena fluktuasi heading singkat
   let lostHeadingFrames = 0;
   const LOST_FRAMES_THRESHOLD = 30; // jumlah frame sebelum dianggap "hilang" (sesuaikan)
-  const HYSTERESIS_ANGLE = 5; // tambahan sudut agar lebih toleran ketika menghapus
+  const HYSTERESIS_ANGLE = 100; // tambahan sudut agar lebih toleran ketika menghapus
 
   // 🎯 Target arah (Utara)
   const TARGET_HEADING = 0;      // derajat utara
-  const ANGLE_THRESHOLD = 15;    // toleransi arah (±15°)
+  const ANGLE_THRESHOLD = 5;    // toleransi arah (±15°)
   let sphereSpawned = false;
 
   // Kompas heading global
