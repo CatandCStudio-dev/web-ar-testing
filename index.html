@@ -67,6 +67,8 @@
   <script type="module">
   import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
+  
+
   let camera, scene, renderer, reticle;
   let hitTestSource = null;
   let localSpace = null;
@@ -78,8 +80,16 @@
   const LOST_FRAMES_THRESHOLD = 30; // jumlah frame sebelum dianggap "hilang" (sesuaikan)
   const HYSTERESIS_ANGLE = 100; // tambahan sudut agar lebih toleran ketika menghapus
 
+  // 🚩 Rute navigasi sederhana
+  const route = [
+    { heading: 0, distance: 5 },   // tahap 1: ke utara 5 meter
+    { heading: 90, distance: 5 }   // tahap 2: ke timur 5 meter
+  ];
+
+  let currentStep = 0;
   // 🎯 Target arah (Utara)
-  const TARGET_HEADING = 0;      // derajat utara
+  let TARGET_HEADING = route[currentStep].heading;
+  let sphereTravelled = false;
   const ANGLE_THRESHOLD = 3;    // toleransi arah 
   let sphereSpawned = false;
 
@@ -131,6 +141,8 @@
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
+    scene.add(camera);
+
   }
 
   async function setupCompass() {
@@ -191,6 +203,10 @@
   }
 
   async function startAR() {
+    if (!navigator.xr) {
+      alert("WebXR tidak didukung di perangkat ini!");
+      return;
+    }
     const session = await navigator.xr.requestSession("immersive-ar", {
       requiredFeatures: ["hit-test", "dom-overlay"],
       domOverlay: { root: document.body }
@@ -209,12 +225,13 @@
   }
 
   function addNavigationSpheres(originPose) {
-    const numSpheres = 5;
     const stepDistance = 1.0;
+    const totalDistance = route[currentStep].distance;
+    const numSpheres = Math.floor(totalDistance / stepDistance);
 
     for (let i = 1; i <= numSpheres; i++) {
       const distance = i * stepDistance;
-      const angle = THREE.MathUtils.degToRad(userHeading);
+      const angle = THREE.MathUtils.degToRad(TARGET_HEADING);
 
       const xPos = Math.sin(angle) * distance;
       const zPos = -Math.cos(angle) * distance;
@@ -240,9 +257,10 @@
   }
 
   function shortestAngleDiff(a, b) {
-  // kembalikan selisih sudut terkecil (0..180)
-  return Math.abs(((a - b + 540) % 360) - 180);
-}
+    let diff = a - b;
+    diff = ((diff + 180) % 360) - 180;
+    return Math.abs(diff);
+  }
 
   function render(timestamp, frame) {
     if (frame && hitTestSource) {
@@ -298,6 +316,28 @@
         lostHeadingFrames = 0;
         console.log("❌ Arah berubah konsisten, bola dihapus");
       }
+    }
+
+    // ✅ Jika tahap selesai (simulasi: bola sudah tampil selama beberapa detik)
+    if (sphereSpawned && !sphereTravelled) {
+      // simulasi delay untuk "selesai berjalan"
+      setTimeout(() => {
+        // hapus bola tahap ini
+        navigationSpheres.forEach(s => scene.remove(s));
+        navigationSpheres = [];
+        sphereSpawned = false;
+        sphereTravelled = true;
+
+        // lanjut ke tahap berikutnya jika ada
+        currentStep++;
+        if (currentStep < route.length) {
+          TARGET_HEADING = route[currentStep].heading;
+          sphereTravelled = false;
+          console.log(`➡️ Lanjut ke tahap ${currentStep + 1}: arah ${TARGET_HEADING}°`);
+        } else {
+          console.log("🎉 Semua tahap navigasi selesai!");
+        }
+      }, 7000); // 7 detik simulasi jalan
     }
 
     renderer.render(scene, camera);
