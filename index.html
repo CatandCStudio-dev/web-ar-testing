@@ -82,8 +82,8 @@
 
   // 🚩 Rute navigasi sederhana
   const route = [
-    { heading: 0, distance: 5 },   // tahap 1: ke utara 5 meter
-    { heading: 90, distance: 5 }   // tahap 2: ke timur 5 meter
+    { heading: 0, distance: 1 },
+    { heading: 90, distance: 1 }
   ];
 
   let currentStep = 0;
@@ -318,27 +318,31 @@
       }
     }
 
-    // ✅ Jika tahap selesai (simulasi: bola sudah tampil selama beberapa detik)
-    if (sphereSpawned && !sphereTravelled) {
-      // simulasi delay untuk "selesai berjalan"
-      setTimeout(() => {
-        // hapus bola tahap ini
-        navigationSpheres.forEach(s => scene.remove(s));
-        navigationSpheres = [];
-        sphereSpawned = false;
-        sphereTravelled = true;
+  // ✅ Jika tahap selesai (simulasi: bola sudah tampil selama beberapa detik)
+  if (sphereSpawned && !sphereTravelled && !render.timeoutStarted) {
+    render.timeoutStarted = true; // ⛔️ agar tidak memanggil setTimeout berulang
+    console.log("⏳ Mulai timer perjalanan tahap ini...");
 
-        // lanjut ke tahap berikutnya jika ada
-        currentStep++;
-        if (currentStep < route.length) {
-          TARGET_HEADING = route[currentStep].heading;
-          sphereTravelled = false;
-          console.log(`➡️ Lanjut ke tahap ${currentStep + 1}: arah ${TARGET_HEADING}°`);
-        } else {
-          console.log("🎉 Semua tahap navigasi selesai!");
-        }
-      }, 7000); // 7 detik simulasi jalan
-    }
+    setTimeout(() => {
+      // hapus bola tahap ini
+      navigationSpheres.forEach(s => scene.remove(s));
+      navigationSpheres = [];
+      sphereSpawned = false;
+      sphereTravelled = true;
+      render.timeoutStarted = false; // reset flag agar bisa digunakan di tahap selanjutnya
+
+      // lanjut ke tahap berikutnya jika ada
+      currentStep++;
+      if (currentStep < route.length) {
+        TARGET_HEADING = route[currentStep].heading;
+        sphereTravelled = false;
+        console.log(`➡️ Lanjut ke tahap ${currentStep + 1}: arah ${TARGET_HEADING}°`);
+      } else {
+        console.log("🎉 Semua tahap navigasi selesai!");
+      }
+    }, 7000); // 7 detik simulasi jalan
+  }
+
 
     renderer.render(scene, camera);
   }
